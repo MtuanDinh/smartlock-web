@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng Điều Khiển - Smart Lock</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        .radar-spinner {
+            width: 80px; height: 80px; border-radius: 50%;
+            border: 4px solid rgba(13, 110, 253, 0.2);
+            border-top-color: #0d6efd;
+            animation: spin 1s linear infinite; margin: 0 auto;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        /* Tùy chỉnh thanh cuộn cho bảng trên Mobile */
+        .table-responsive::-webkit-scrollbar { height: 6px; }
+        .table-responsive::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-light">
+
+<!-- ======================================================= -->
+<!-- MÀN HÌNH CHỜ XÁC THỰC -->
+<!-- ======================================================= -->
+<div id="authLoadingScreen" class="container mt-5 text-center">
+    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+    <h5 class="text-primary mt-3 fw-bold">Đang kết nối hệ thống...</h5>
+</div>
+
+<!-- ======================================================= -->
+<!-- MÀN HÌNH ĐĂNG NHẬP -->
+<!-- ======================================================= -->
+<div id="loginScreen" class="container mt-5" style="max-width: 400px; display: none;">
+    <div class="card shadow border-0">
+        <div class="card-body p-4 text-center">
+            <h3 class="text-primary fw-bold mb-4">🔐 ĐĂNG NHẬP</h3>
+            <input type="email" id="loginEmail" class="form-control mb-3" placeholder="Email quản trị">
+            <input type="password" id="loginPass" class="form-control mb-3" placeholder="Mật khẩu bảo mật">
+            <button id="btnLogin" class="btn btn-primary w-100 fw-bold">Vào Hệ Thống</button>
+            <p id="loginError" class="text-danger mt-3 mb-0" style="display: none;"></p>
+        </div>
+    </div>
+</div>
+
+<!-- ======================================================= -->
+<!-- KHU VỰC DASHBOARD CHÍNH -->
+<!-- ======================================================= -->
+<div id="dashboardScreen" style="display: none;">
+    <div class="container mt-3 mt-md-4 mb-5" style="max-width: 950px;">
+        
+        <!-- Header (Tự động dàn cột trên Mobile) -->
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center mb-4 gap-3">
+            <h3 class="text-primary fw-bold mb-0 text-center text-sm-start">TRUNG TÂM ĐIỀU KHIỂN</h3>
+            <button id="btnLogout" class="btn btn-outline-danger btn-sm fw-bold shadow-sm w-100 w-sm-auto">Đăng xuất</button>
+        </div>
+        
+        <div class="text-center mb-4">
+            <span id="sysStatus" class="badge bg-secondary fs-6 p-2 shadow-sm">⏳ Đang đồng bộ dữ liệu...</span>
+        </div>
+
+        <!-- Điều khiển chung (Flexbox Reponsive: Cột trên Mobile, Hàng trên PC) -->
+        <div class="d-flex flex-column flex-md-row justify-content-center gap-2 mb-4">
+            <button id="btnOpenDoor" class="btn btn-success btn-lg disabled shadow">🔓 Mở Cửa Từ Xa</button>
+            <button id="btnLockdown" class="btn btn-outline-danger btn-lg disabled shadow">🚨 Khóa Khẩn Cấp</button>
+            <button id="btnAddUser" class="btn btn-primary btn-lg disabled shadow" onclick="openAddUserModal()">👤 Thêm Thành Viên</button>
+        </div>
+
+        <!-- BẢNG QUẢN LÝ THÀNH VIÊN -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-dark text-white fw-bold">📋 Danh sách Thành viên</div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-hover table-striped mb-0 text-center align-middle">
+                    <thead class="table-secondary text-nowrap">
+                        <tr>
+                            <th>Thành Viên</th>
+                            <th>Trạng Thái</th>
+                            <th>Mã PIN</th>
+                            <th>Thẻ Từ</th>
+                            <th>Tùy Chọn</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <tr><td colspan="5" class="text-muted py-4">⏳ Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- BẢNG LỊCH SỬ MỞ CỬA -->
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-info text-white fw-bold d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
+                <span>🕒 Lịch sử mở cửa (50 lượt gần nhất)</span>
+                <div class="d-flex gap-2">
+                    <a href="logs.html" class="btn btn-sm btn-primary fw-bold shadow-sm">📋 Xem tất cả</a>
+                    <button class="btn btn-sm btn-light text-danger fw-bold shadow-sm" onclick="clearLogs()">🗑️ Xóa log</button>
+                </div>
+            </div>
+            <div class="card-body p-0 table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-hover mb-0 align-middle text-center">
+                    <thead class="table-light sticky-top text-nowrap">
+                        <tr>
+                            <th>Thời gian</th>
+                            <th>Sự kiện</th>
+                            <th>Người thực hiện</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        <tr><td colspan="3" class="text-muted py-4">Đang tải lịch sử...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- KHU VỰC CÁC MODAL (POP-UP) -->
+<!-- ========================================================================= -->
+<!-- Modal Thêm/Sửa Thành Viên -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="userModalTitle">Thêm Thành Viên Mới</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+            <label class="form-label fw-bold">Họ và Tên:</label>
+            <input type="text" id="modalUserName" class="form-control" placeholder="Ví dụ: Bố, Mẹ, Khách...">
+        </div>
+        <div class="mb-3" id="divModalPass">
+            <label class="form-label fw-bold">Mã PIN mở cửa (Không bắt buộc):</label>
+            <input type="number" id="modalUserPass" class="form-control" placeholder="Để trống nếu muốn thiết lập sau">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy bỏ</button>
+        <button type="button" class="btn btn-primary" id="btnSaveUser">Lưu Thông Tin</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Đổi Mã PIN -->
+<div class="modal fade" id="passModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-secondary text-white">
+        <h5 class="modal-title">Cập Nhật Mã PIN</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Đang đổi mã PIN cho: <strong id="passModalName" class="text-primary"></strong></p>
+        <div class="mb-3">
+            <input type="number" id="modalNewPass" class="form-control" placeholder="Nhập PIN mới (Bỏ trống để xóa mã cũ)">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy bỏ</button>
+        <button type="button" class="btn btn-success" id="btnSavePass">Cập Nhật</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Quét Thẻ -->
+<div class="modal fade" id="cardModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-center py-4">
+      <div class="modal-body">
+        <h4 class="text-primary fw-bold mb-3">CHẾ ĐỘ HỌC THẺ</h4>
+        <p class="mb-4">Đang kết nối để cấp thẻ cho:<br><strong id="cardModalName" class="fs-5 text-dark"></strong></p>
+        <div class="radar-spinner mb-4"></div>
+        <h5 class="text-secondary pulse">Vui lòng chạm thẻ từ vào mặt khóa...</h5>
+        <p class="text-muted small mt-2">Màn hình sẽ tự động đóng khi nhận thẻ thành công.</p>
+      </div>
+      <div class="modal-footer justify-content-center border-0">
+        <button type="button" class="btn btn-outline-danger px-4" onclick="cancelLearnCard()">Hủy Giao Dịch</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- THƯ VIỆN FIREBASE -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+
+<script>
+    // ĐIỀN THÔNG TIN FIREBASE CỦA BẠN VÀO ĐÂY
+    const firebaseConfig = {
+        apiKey: "AIzaSyB7w3c38FM845cYwsnz_xXVDlRnlcdIz8U", 
+        authDomain: "lock-iot-2a021.firebaseapp.com",
+        projectId: "lock-iot-2a021",
+        databaseURL: "https://lock-iot-2a021-default-rtdb.asia-southeast1.firebasedatabase.app"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const auth = firebase.auth();
+
+    // ==========================================
+    // QUẢN LÝ XÁC THỰC
+    // ==========================================
+    const loginScreen = document.getElementById('loginScreen');
+    const dashboardScreen = document.getElementById('dashboardScreen');
+    const loginError = document.getElementById('loginError');
+    let isDataLoaded = false;
+
+    document.getElementById('btnLogin').addEventListener('click', () => {
+        let email = document.getElementById('loginEmail').value;
+        let pass = document.getElementById('loginPass').value;
+        auth.signInWithEmailAndPassword(email, pass).catch((error) => {
+            loginError.innerText = "❌ Sai tài khoản hoặc mật khẩu!";
+            loginError.style.display = "block";
+        });
+    });
+
+    document.getElementById('btnLogout').addEventListener('click', () => auth.signOut());
+
+    auth.onAuthStateChanged((user) => {
+        document.getElementById('authLoadingScreen').style.display = "none";
+        if (user) {
+            loginScreen.style.display = "none";
+            dashboardScreen.style.display = "block";
+            if (!isDataLoaded) { startLoadingDashboardData(); isDataLoaded = true; }
+        } else {
+            loginScreen.style.display = "block";
+            dashboardScreen.style.display = "none";
+        }
+    });
+
+    // ==========================================
+    // TẢI DỮ LIỆU & GIAO DIỆN CHÍNH
+    // ==========================================
+    const userModal = new bootstrap.Modal(document.getElementById('userModal'));
+    const passModal = new bootstrap.Modal(document.getElementById('passModal'));
+    const cardModal = new bootstrap.Modal(document.getElementById('cardModal'));
+    let currentUserContext = {}; 
+    let existingPasswords = []; 
+    let isSystemLockdown = false;
+
+    function startLoadingDashboardData() {
+        // Trạng thái Khóa Khẩn Cấp
+        database.ref('SmartLock/Control/Lockdown').on('value', (snapshot) => {
+            isSystemLockdown = snapshot.val() || false;
+            let btn = document.getElementById('btnLockdown');
+            if (isSystemLockdown) {
+                btn.className = "btn btn-danger btn-lg shadow";
+                btn.innerHTML = "🛑 ĐANG KHÓA CỬA (Nhấn để Mở)";
+            } else {
+                btn.className = "btn btn-outline-danger btn-lg shadow";
+                btn.innerHTML = "🚨 Khóa Khẩn Cấp";
+            }
+        });
+
+        // Tải Danh Sách Thành Viên
+        database.ref('SmartLock/Users').on('value', (snapshot) => {
+            let html = '';
+            existingPasswords = []; 
+            
+            snapshot.forEach((child) => {
+                let user = child.val();
+                let userId = child.key;
+                let status = user.status || 'active';
+                
+                if (user.pass) existingPasswords.push(user.pass);
+                
+                let statusHtml = (status === 'active') 
+                    ? `<span class="badge bg-success" style="cursor:pointer" onclick="toggleUserStatus('${userId}', 'disabled', '${user.pass||''}', '${user.card||''}', '${user.name}')">Đang mở</span>`
+                    : `<span class="badge bg-secondary" style="cursor:pointer" onclick="toggleUserStatus('${userId}', 'active', '${user.pass||''}', '${user.card||''}', '${user.name}')">Tạm khóa</span>`;
+
+                let isDis = (status === 'disabled') ? 'disabled' : '';
+
+                // Định dạng lại các nút nhỏ, gọn gàng hơn trên Mobile
+                let passHtml = user.pass 
+                    ? `<span class="fw-bold text-danger">${user.pass}</span> <br class="d-md-none"><button class="btn btn-sm btn-outline-secondary ms-1 mt-1 mt-md-0 ${isDis}" onclick="openPassModal('${userId}', '${user.pass}', '${user.name}', '${status}')">Đổi</button>` 
+                    : `<button class="btn btn-sm btn-secondary ${isDis}" onclick="openPassModal('${userId}', '', '${user.name}', '${status}')">Cấp mã</button>`;
+                    
+                let cardHtml = user.card 
+                    ? `<span class="badge bg-success">UID: ${user.card}</span> <br class="d-md-none"><button class="btn btn-sm btn-outline-warning ms-1 mt-1 mt-md-0 ${isDis}" onclick="startLearnCard('${userId}', '${user.name}', '${user.card}', '${status}')">Đổi thẻ</button>` 
+                    : `<button class="btn btn-sm btn-warning ${isDis}" onclick="startLearnCard('${userId}', '${user.name}', '', '${status}')">Thêm thẻ</button>`;
+
+                let trClass = (status === 'disabled') ? 'table-secondary text-muted' : '';
+
+                html += `
+                    <tr class="${trClass}">
+                        <td class="fw-bold text-primary text-nowrap">
+                            ${user.name} 
+                            <button class="btn btn-sm btn-link text-decoration-none ${isDis} px-1" onclick="openEditNameModal('${userId}', '${user.name}', '${user.pass || ''}', '${user.card || ''}', '${status}')">✏️</button>
+                        </td>
+                        <td>${statusHtml}</td>
+                        <td class="text-nowrap">${passHtml}</td>
+                        <td class="text-nowrap">${cardHtml}</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm text-nowrap" onclick="deleteUser('${userId}', '${user.pass || ''}', '${user.card || ''}', '${user.name}', '${status}')">Xóa</button>
+                        </td>
+                    </tr>`;
+            });
+            
+            if (html === '') html = '<tr><td colspan="5" class="text-muted py-4">Chưa có thành viên nào.</td></tr>';
+            document.getElementById('usersTableBody').innerHTML = html;
+        });
+
+        // Tải Nhật Ký
+        database.ref('SmartLock/Logs').on('value', (snapshot) => {
+            let logs = [];
+            snapshot.forEach((child) => {
+                let logData = child.val();
+                if (logData && typeof logData === 'object') logs.push(logData);
+            });
+            logs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            logs = logs.slice(0, 50);
+            
+            let html = '';
+            logs.forEach(log => {
+                let actionStr = log.action || 'Không rõ hành động';
+                let userStr = log.user || 'Không rõ người dùng';
+                let timeStr = log.timestamp ? new Date(log.timestamp).toLocaleString('vi-VN', { hour12: false }) : 'Không rõ thời gian';
+
+                let badgeClass = 'bg-success'; 
+                if (actionStr.includes('Cảnh báo')) badgeClass = 'bg-danger';
+                else if (actionStr.includes('Nút bấm')) badgeClass = 'bg-secondary';
+                else if (actionStr.includes('Web')) badgeClass = 'bg-primary';
+                else if (actionStr.includes('HỆ THỐNG')) badgeClass = 'bg-dark';
+                else if (actionStr.includes('khởi động')) badgeClass = 'bg-info text-dark';
+
+                html += `<tr>
+                            <td class="text-muted small text-nowrap">${timeStr}</td>
+                            <td class="text-nowrap"><span class="badge ${badgeClass}">${actionStr}</span></td>
+                            <td class="fw-bold text-nowrap">${userStr}</td>
+                         </tr>`;
+            });
+            if (html === '') html = '<tr><td colspan="3" class="text-muted py-4">Chưa có sự kiện nào.</td></tr>';
+            document.getElementById('logsTableBody').innerHTML = html;
+        });
+
+        // Nhịp tim kết nối (Heartbeat)
+        let lastBeatTime = 0; let serverTimeOffset = 0; 
+        database.ref('.info/serverTimeOffset').on('value', snap => serverTimeOffset = snap.val() || 0);
+        database.ref('SmartLock/System/Last_Beat').on('value', snap => { lastBeatTime = snap.val(); checkSystemStatus(); });
+
+        function checkSystemStatus() {
+            if (lastBeatTime === 0) return; 
+            let diff = (Date.now() + serverTimeOffset) - lastBeatTime;
+            let badge = document.getElementById('sysStatus');
+            let btns = [document.getElementById('btnOpenDoor'), document.getElementById('btnLockdown'), document.getElementById('btnAddUser')];
+
+            if (diff < 20000) { 
+                badge.className = "badge bg-success fs-6 p-2 shadow-sm"; badge.innerHTML = "🟢 KẾT NỐI ỔN ĐỊNH";
+                btns.forEach(btn => btn.classList.remove('disabled'));
+            } else {
+                badge.className = "badge bg-danger fs-6 p-2 shadow-sm"; badge.innerHTML = "🔴 Ổ KHÓA ĐANG MẤT MẠNG";
+                btns.forEach(btn => btn.classList.add('disabled'));
+            }
+        }
+        setInterval(checkSystemStatus, 3000);
+    }
+
+    // ==========================================
+    // CÁC HÀM TƯƠNG TÁC GIAO DIỆN
+    // ==========================================
+    document.getElementById('btnLockdown').addEventListener('click', () => {
+        if (!isSystemLockdown) {
+            if (confirm("CẢNH BÁO: Chế độ Khóa Khẩn Cấp sẽ vô hiệu hóa hoàn toàn bàn phím và thẻ từ. Người nhà sẽ không thể mở cửa. Bạn có chắc chắn?")) {
+                database.ref('SmartLock/Control/Lockdown').set(true);
+            }
+        } else {
+            database.ref('SmartLock/Control/Lockdown').set(false);
+        }
+    });
+
+    document.getElementById('btnOpenDoor').addEventListener('click', () => {
+        database.ref('SmartLock/Control/Remote_Open').set(true);
+        let btn = document.getElementById('btnOpenDoor');
+        btn.innerHTML = "Đang gửi lệnh...";
+        setTimeout(() => btn.innerHTML = "🔓 Mở Cửa Từ Xa", 1500);
+    });
+
+    window.toggleUserStatus = function(userId, newStatus, pass, card, name) {
+        database.ref('SmartLock/Users/' + userId).update({ status: newStatus });
+        if (newStatus === 'disabled') {
+            if(pass !== "") database.ref('SmartLock/Passwords/' + pass).remove();
+            if(card !== "") database.ref('SmartLock/RFID/' + card).remove();
+        } else {
+            if(pass !== "") database.ref('SmartLock/Passwords/' + pass).set(name);
+            if(card !== "") database.ref('SmartLock/RFID/' + card).set(name);
+        }
+        database.ref('SmartLock/Control/Need_Sync').set(true);
+    };
+
+    window.deleteUser = function(userId, pass, card, name, status) {
+        if (confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn [${name}] cùng toàn bộ quyền truy cập?`)) {
+            if(status === 'active') { 
+                if(pass !== "") database.ref('SmartLock/Passwords/' + pass).remove();
+                if(card !== "") database.ref('SmartLock/RFID/' + card).remove();
+            }
+            database.ref('SmartLock/Users/' + userId).remove();
+            database.ref('SmartLock/Control/Need_Sync').set(true);
+        }
+    };
+
+    window.openAddUserModal = function() {
+        document.getElementById('userModalTitle').innerText = "Thêm Thành Viên";
+        document.getElementById('modalUserName').value = "";
+        document.getElementById('modalUserPass').value = "";
+        document.getElementById('divModalPass').style.display = "block"; 
+        currentUserContext = { action: 'add' };
+        userModal.show();
+    };
+
+    window.openEditNameModal = function(userId, oldName, pass, card, status) {
+        if(status === 'disabled') { alert("Vui lòng mở khóa trạng thái của thành viên này trước khi sửa đổi!"); return; }
+        document.getElementById('userModalTitle').innerText = "Đổi Tên Thành Viên";
+        document.getElementById('modalUserName').value = oldName;
+        document.getElementById('divModalPass').style.display = "none"; 
+        currentUserContext = { action: 'editName', id: userId, oldName: oldName, pass: pass, card: card };
+        userModal.show();
+    };
+
+    document.getElementById('btnSaveUser').addEventListener('click', () => {
+        let name = document.getElementById('modalUserName').value.trim();
+        if(name === "") { alert("Vui lòng điền tên thành viên!"); return; }
+        
+        if (currentUserContext.action === 'add') {
+            let pass = document.getElementById('modalUserPass').value.trim();
+            if (pass !== "" && existingPasswords.includes(pass)) {
+                alert("❌ LỖI: Mã PIN này đã có người sử dụng! Vui lòng chọn mã khác.");
+                return;
+            }
+            let userId = "user_" + Date.now(); 
+            database.ref('SmartLock/Users/' + userId).set({ name: name, pass: pass, card: "", status: "active" });
+            if(pass !== "") database.ref('SmartLock/Passwords/' + pass).set(name);
+            
+        } else if (currentUserContext.action === 'editName') {
+            if (name !== currentUserContext.oldName) {
+                database.ref('SmartLock/Users/' + currentUserContext.id).update({ name: name });
+                if(currentUserContext.pass !== "") database.ref('SmartLock/Passwords/' + currentUserContext.pass).set(name);
+                if(currentUserContext.card !== "") database.ref('SmartLock/RFID/' + currentUserContext.card).set(name);
+            }
+        }
+        database.ref('SmartLock/Control/Need_Sync').set(true);
+        userModal.hide();
+    });
+
+    window.openPassModal = function(userId, oldPass, name, status) {
+        if(status === 'disabled') { alert("Vui lòng mở khóa trạng thái của thành viên này trước khi sửa đổi!"); return; }
+        document.getElementById('passModalName').innerText = name;
+        document.getElementById('modalNewPass').value = oldPass;
+        currentUserContext = { id: userId, oldPass: oldPass, name: name };
+        passModal.show();
+    };
+
+    document.getElementById('btnSavePass').addEventListener('click', () => {
+        let newPass = document.getElementById('modalNewPass').value.trim();
+        if (newPass !== "" && newPass !== currentUserContext.oldPass && existingPasswords.includes(newPass)) {
+            alert("❌ LỖI: Mã PIN này đã có người sử dụng! Vui lòng chọn mã khác.");
+            return;
+        }
+        if (newPass !== currentUserContext.oldPass) {
+            if(currentUserContext.oldPass !== "") database.ref('SmartLock/Passwords/' + currentUserContext.oldPass).remove();
+            if(newPass !== "") database.ref('SmartLock/Passwords/' + newPass).set(currentUserContext.name);
+            database.ref('SmartLock/Users/' + currentUserContext.id).update({ pass: newPass });
+        }
+        database.ref('SmartLock/Control/Need_Sync').set(true);
+        passModal.hide();
+    });
+
+    window.startLearnCard = function(userId, userName, oldCard, status) {
+        if(status === 'disabled') { alert("Vui lòng mở khóa trạng thái của thành viên này trước khi sửa đổi!"); return; }
+        document.getElementById('cardModalName').innerText = userName;
+        cardModal.show();
+        database.ref('SmartLock/Control/Target_User').set(userId);
+        database.ref('SmartLock/Control/Target_Name').set(userName);
+        database.ref('SmartLock/Control/Add_Card_Mode').set(true);
+        
+        let learnRef = database.ref('SmartLock/Control/Add_Card_Mode');
+        let listener = learnRef.on('value', function(snapshot) {
+            let isLearning = snapshot.val();
+            if (isLearning === false) {
+                cardModal.hide(); 
+                learnRef.off('value', listener); 
+                database.ref('SmartLock/Users/' + userId + '/card').once('value').then((snap) => {
+                    let currentCardOnCloud = snap.val() || "";
+                    if (currentCardOnCloud !== "" && currentCardOnCloud !== oldCard && oldCard !== "") {
+                        database.ref('SmartLock/RFID/' + oldCard).remove();
+                    }
+                });
+            }
+        });
+    };
+
+    window.cancelLearnCard = function() {
+        database.ref('SmartLock/Control/Add_Card_Mode').set(false); 
+        cardModal.hide();
+    };
+
+    document.getElementById('cardModal').addEventListener('hidden.bs.modal', function () {
+        database.ref('SmartLock/Control/Add_Card_Mode').set(false);
+    });
+
+    window.clearLogs = function() {
+        if (confirm("Hành động này sẽ xóa vĩnh viễn toàn bộ lịch sử mở cửa. Bạn có chắc chắn không?")) {
+            database.ref('SmartLock/Logs').remove();
+        }
+    };
+</script>
+
+</body>
+</html>
