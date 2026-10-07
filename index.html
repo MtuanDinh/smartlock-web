@@ -18,7 +18,7 @@
             position: fixed; bottom: 0; left: 0; right: 0;
             background-color: #212529; border-top: 1px solid #343a40;
             display: flex; justify-content: space-around;
-            padding: 10px 0 8px; /* Đã xóa hàm calc() gây lỗi khoảng trống */
+            padding: 10px 0 8px; /* Đã xóa calc() và căn lại lề chuẩn */
             z-index: 1050;
         }
         .bottom-nav-item {
@@ -224,15 +224,11 @@
             updateBigLockUI();
         });
 
-        // BẢN VÁ LỖI: HIỂN THỊ ĐỦ 5 DÒNG NHẬT KÝ
         database.ref('SmartLock/Logs').orderByChild('timestamp').limitToLast(5).on('value', (snapshot) => {
             let logs = [];
-            
-            // Dùng ngoặc nhọn để ngăn việc return giá trị chiều dài mảng (nguyên nhân gây dừng sớm vòng lặp)
             snapshot.forEach((child) => {
                 logs.push(child.val());
             });
-            
             logs.reverse(); 
             
             let html = '';
