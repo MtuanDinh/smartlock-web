@@ -15,12 +15,12 @@
         .btn-custom { transition: all 0.2s; }
         .btn-custom:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
 
-        /* CSS CHO THANH ĐIỀU HƯỚNG DƯỚI ĐÁY */
+        /* CSS CHO THANH ĐIỀU HƯỚNG DƯỚI ĐÁY (MOBILE APP STYLE) */
         .bottom-nav {
             position: fixed; bottom: 0; left: 0; right: 0;
             background-color: #212529; border-top: 1px solid #343a40;
             display: flex; justify-content: space-around;
-            padding: 8px 0; padding-bottom: calc(8px + env(safe-area-inset-bottom));
+            padding: 10px 0 8px; /* Đã xóa hàm calc() gây lỗi khoảng trống */
             z-index: 1050;
         }
         .bottom-nav-item {
@@ -28,11 +28,12 @@
             flex-direction: column; align-items: center;
             font-size: 0.75rem; font-weight: 600; transition: color 0.2s;
         }
-        .bottom-nav-item i { font-size: 1.5rem; margin-bottom: 2px; }
+        .bottom-nav-item i { font-size: 1.4rem; margin-bottom: 2px; }
         .bottom-nav-item.active { color: #0d6efd; }
         
+        /* Tùy biến hiển thị theo thiết bị */
         @media (min-width: 992px) { .bottom-nav { display: none !important; } }
-        @media (max-width: 991px) { body { padding-bottom: 75px; } }
+        @media (max-width: 991px) { body { padding-bottom: 65px; } }
     </style>
 </head>
 <body class="bg-body">
@@ -127,7 +128,8 @@
         </div>
         <div class="mb-3" id="divModalPass">
             <label class="form-label fw-bold text-light">Mã PIN mở cửa (Tùy chọn):</label>
-            <input type="number" id="modalUserPass" class="form-control bg-dark-subtle text-light border-secondary" placeholder="Nhập PIN">
+            <!-- Sử dụng inputmode="numeric" thay cho type="number" để chống lỗi cắt mất số 0 ở đầu -->
+            <input type="text" inputmode="numeric" pattern="[0-9]*" id="modalUserPass" class="form-control bg-dark-subtle text-light border-secondary" placeholder="Nhập PIN">
         </div>
       </div>
       <div class="modal-footer border-secondary">
@@ -148,7 +150,7 @@
       </div>
       <div class="modal-body text-center">
         <p class="text-light mb-3">Tài khoản: <strong id="passModalName" class="text-primary"></strong></p>
-        <input type="number" id="modalNewPass" class="form-control bg-dark-subtle text-light border-secondary text-center fs-4 fw-bold" placeholder="----">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="modalNewPass" class="form-control bg-dark-subtle text-light border-secondary text-center fs-4 fw-bold tracking-widest" placeholder="----">
         <small class="text-muted mt-2 d-block">Bỏ trống và bấm Lưu để xóa mã</small>
       </div>
       <div class="modal-footer border-secondary justify-content-center">
@@ -193,7 +195,10 @@
 
     const loginScreen = document.getElementById('loginScreen');
     const dashboardScreen = document.getElementById('dashboardScreen');
+    
+    // Khai báo biến isOffline để chống lỗi Mất mạng khi thêm thẻ
     let isDataLoaded = false;
+    let isOffline = true; 
 
     auth.onAuthStateChanged((user) => {
         document.getElementById('authLoadingScreen').style.display = "none";
@@ -218,7 +223,8 @@
             
             snapshot.forEach((child) => {
                 let user = child.val(); let userId = child.key; let status = user.status || 'active';
-                if (user.pass) existingPasswords.push(user.pass);
+                // Ép kiểu String để tránh lỗi khi dùng hàm includes kiểm tra trùng PIN
+                if (user.pass) existingPasswords.push(String(user.pass));
                 
                 let statusHtml = (status === 'active') 
                     ? `<span class="badge bg-success bg-opacity-75 text-light border border-success" style="cursor:pointer" onclick="toggleUserStatus('${userId}', 'disabled', '${user.pass||''}', '${user.card||''}', '${user.name}')"><i class="bi bi-check-circle"></i> Mở</span>`
@@ -264,9 +270,11 @@
             let diff = (Date.now() + serverTimeOffset) - lastBeatTime;
             let badge = document.getElementById('sysStatusBadge');
             if (diff < 20000) { 
+                isOffline = false;
                 badge.className = "badge bg-success bg-opacity-25 text-success border border-success p-2 shadow-sm"; 
                 badge.innerHTML = "<i class='bi bi-wifi'></i> <span class='d-none d-sm-inline'>Online</span>"; 
             } else {
+                isOffline = true;
                 badge.className = "badge bg-danger bg-opacity-25 text-danger border border-danger p-2 shadow-sm"; 
                 badge.innerHTML = "<i class='bi bi-wifi-off'></i> <span class='d-none d-sm-inline'>Offline</span>"; 
             }
@@ -350,6 +358,9 @@
 
     window.startLearnCard = function(userId, userName, oldCard, status) {
         if(status === 'disabled') { alert("Mở khóa thành viên trước khi sửa!"); return; }
+        // BẢN VÁ LỖI: CHẶN VIỆC ẤN THÊM THẺ KHI MẤT MẠNG 
+        if(isOffline) { alert("⚠️ Ổ khóa đang mất kết nối! Bạn không thể thêm thẻ từ vào lúc này."); return; }
+
         document.getElementById('cardModalName').innerText = userName; cardModal.show();
         database.ref('SmartLock/Control/Target_User').set(userId);
         database.ref('SmartLock/Control/Target_Name').set(userName);

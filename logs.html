@@ -11,12 +11,12 @@
         .table-responsive::-webkit-scrollbar { height: 6px; }
         .table-responsive::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
         
-        /* CSS CHO THANH ĐIỀU HƯỚNG DƯỚI ĐÁY */
+        /* CSS CHO THANH ĐIỀU HƯỚNG DƯỚI ĐÁY (MOBILE APP STYLE) */
         .bottom-nav {
             position: fixed; bottom: 0; left: 0; right: 0;
             background-color: #212529; border-top: 1px solid #343a40;
             display: flex; justify-content: space-around;
-            padding: 8px 0; padding-bottom: calc(8px + env(safe-area-inset-bottom));
+            padding: 10px 0 8px; /* Đã xóa hàm calc() gây lỗi khoảng trống */
             z-index: 1050;
         }
         .bottom-nav-item {
@@ -24,11 +24,12 @@
             flex-direction: column; align-items: center;
             font-size: 0.75rem; font-weight: 600; transition: color 0.2s;
         }
-        .bottom-nav-item i { font-size: 1.5rem; margin-bottom: 2px; }
+        .bottom-nav-item i { font-size: 1.4rem; margin-bottom: 2px; }
         .bottom-nav-item.active { color: #0d6efd; }
         
+        /* Tùy biến hiển thị theo thiết bị */
         @media (min-width: 992px) { .bottom-nav { display: none !important; } }
-        @media (max-width: 991px) { body { padding-bottom: 75px; } }
+        @media (max-width: 991px) { body { padding-bottom: 65px; } }
     </style>
 </head>
 <body class="bg-body">
