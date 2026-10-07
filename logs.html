@@ -1,69 +1,84 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lịch Sử Hoạt Động - Smart Lock</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <style>
-        /* Tùy chỉnh thanh cuộn cho bảng trên Mobile */
         .table-responsive::-webkit-scrollbar { height: 6px; }
-        .table-responsive::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+        .table-responsive::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        
+        /* CSS CHO THANH ĐIỀU HƯỚNG DƯỚI ĐÁY */
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background-color: #212529; border-top: 1px solid #343a40;
+            display: flex; justify-content: space-around;
+            padding: 8px 0; padding-bottom: calc(8px + env(safe-area-inset-bottom));
+            z-index: 1050;
+        }
+        .bottom-nav-item {
+            color: #6c757d; text-decoration: none; display: flex;
+            flex-direction: column; align-items: center;
+            font-size: 0.75rem; font-weight: 600; transition: color 0.2s;
+        }
+        .bottom-nav-item i { font-size: 1.5rem; margin-bottom: 2px; }
+        .bottom-nav-item.active { color: #0d6efd; }
+        
+        @media (min-width: 992px) { .bottom-nav { display: none !important; } }
+        @media (max-width: 991px) { body { padding-bottom: 75px; } }
     </style>
 </head>
-<body class="bg-light">
+<body class="bg-body">
 
-<!-- ======================================================= -->
-<!-- MÀN HÌNH CHỜ XÁC THỰC -->
-<!-- ======================================================= -->
 <div id="authLoadingScreen" class="container mt-5 text-center">
     <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
-    <h5 class="text-primary mt-3 fw-bold">Đang kết nối hệ thống...</h5>
 </div>
 
-<!-- ======================================================= -->
-<!-- MÀN HÌNH ĐĂNG NHẬP -->
-<!-- ======================================================= -->
-<div id="loginScreen" class="container mt-5" style="max-width: 400px; display: none;">
-    <div class="card shadow border-0">
-        <div class="card-body p-4 text-center">
-            <h3 class="text-primary fw-bold mb-4">🔐 ĐĂNG NHẬP</h3>
-            <input type="email" id="loginEmail" class="form-control mb-3" placeholder="Email quản trị">
-            <input type="password" id="loginPass" class="form-control mb-3" placeholder="Mật khẩu bảo mật">
-            <button id="btnLogin" class="btn btn-primary w-100 fw-bold">Vào Hệ Thống</button>
-            <p id="loginError" class="text-danger mt-3 mb-0" style="display: none;"></p>
-        </div>
-    </div>
+<div id="loginScreen" class="container mt-5 text-center" style="display: none;">
+    <h3 class="text-primary mt-5">Vui lòng đăng nhập ở trang Tổng quan.</h3>
+    <a href="index.html" class="btn btn-outline-primary mt-3">Quay lại trang chủ</a>
 </div>
 
-<!-- ======================================================= -->
-<!-- KHU VỰC DASHBOARD CHÍNH -->
-<!-- ======================================================= -->
 <div id="dashboardScreen" style="display: none;">
-    <div class="container mt-3 mt-md-4 mb-5" style="max-width: 1000px;">
-        
-        <!-- Nút quay lại và Tiêu đề (Tự động dàn cột trên Mobile) -->
-        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center mb-4 gap-3">
-            <h3 class="text-primary fw-bold mb-0 text-center text-sm-start">LỊCH SỬ HOẠT ĐỘNG</h3>
-            <div class="d-flex w-100 w-sm-auto gap-2">
-                <a href="index.html" class="btn btn-outline-secondary fw-bold shadow-sm flex-fill">🔙 Bảng điều khiển</a>
-                <button id="btnLogout" class="btn btn-outline-danger fw-bold shadow-sm flex-fill">Đăng xuất</button>
+    <!-- THANH MENU TRÊN CÙNG -->
+    <nav class="navbar navbar-dark bg-dark border-bottom border-secondary sticky-top shadow-sm mb-4">
+        <div class="container-fluid" style="max-width: 1000px;">
+            <a class="navbar-brand fw-bold text-primary d-flex align-items-center gap-2" href="index.html">
+                <i class="bi bi-cpu-fill"></i> SMART LOCK
+            </a>
+            
+            <div class="d-none d-lg-flex me-auto ms-4 gap-2">
+                <a class="nav-link px-3 py-2 text-light" href="index.html"><i class="bi bi-house-door me-1"></i> Tổng quan</a>
+                <a class="nav-link px-3 py-2 text-light" href="users.html"><i class="bi bi-people me-1"></i> Thành viên</a>
+                <!-- ĐÃ SỬA LỖI ICON Ở ĐÂY -->
+                <a class="nav-link active fw-bold text-white bg-secondary bg-opacity-25 rounded px-3 py-2" href="logs.html"><i class="bi bi-clock-history me-1"></i> Nhật ký</a>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <span id="sysStatusBadge" class="badge bg-secondary p-2 shadow-sm"><i class="bi bi-hourglass-split"></i></span>
+                <button id="btnLogout" class="btn btn-outline-light btn-sm fw-bold rounded-pill px-3 py-1" title="Đăng xuất"><i class="bi bi-box-arrow-right"></i> <span class="d-none d-sm-inline">Thoát</span></button>
             </div>
         </div>
+    </nav>
 
-        <!-- Bảng lưu trữ toàn bộ sự kiện -->
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-dark text-white fw-bold d-flex flex-column flex-md-row justify-content-between align-items-center py-3 gap-2">
-                <span>🗄️ Toàn bộ dữ liệu truy cập khóa</span>
-                <!-- Thanh tìm kiếm Real-time (Tràn viền trên Mobile) -->
+    <div class="container mb-4" style="max-width: 1000px;">
+        <div class="card shadow-sm border-0 rounded-4 bg-dark-subtle">
+            <div class="card-header bg-dark text-white fw-bold border-bottom border-secondary d-flex flex-column flex-md-row justify-content-between align-items-center py-3 gap-2 rounded-top-4">
+                <span class="fs-5"><i class="bi bi-server me-2 text-info"></i>Dữ liệu truy cập</span>
                 <div class="w-100" style="max-width: 400px;">
-                    <input type="text" id="searchInput" class="form-control form-control-sm w-100" placeholder="🔍 Tìm kiếm (VD: Mở cửa, Bố, Mẹ)...">
+                    <div class="input-group">
+                        <span class="input-group-text bg-secondary border-secondary text-light"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control bg-dark text-light border-secondary" placeholder="Tìm kiếm (VD: Mở cửa, Bố, Mẹ)...">
+                    </div>
                 </div>
             </div>
             
             <div class="card-body p-0 table-responsive" style="min-height: 500px;">
                 <table class="table table-hover table-striped mb-0 align-middle text-center">
-                    <thead class="table-secondary shadow-sm text-nowrap">
+                    <thead class="text-nowrap border-bottom border-secondary">
                         <tr>
                             <th style="width: 10%">STT</th>
                             <th style="width: 25%">Giờ</th>
@@ -72,21 +87,35 @@
                         </tr>
                     </thead>
                     <tbody id="fullLogsTableBody">
-                        <tr><td colspan="4" class="text-muted py-5 fs-5">⏳ Đang tải dữ liệu...</td></tr>
+                        <tr><td colspan="4" class="text-muted py-5 fs-5">Đang tải dữ liệu...</td></tr>
                     </tbody>
                 </table>
             </div>
             
-            <!-- Khu vực Phân trang (Pagination) - Tự động giãn dòng trên Mobile -->
-            <div class="card-footer bg-white d-flex flex-column flex-md-row justify-content-between align-items-center py-3 border-top gap-3">
+            <div class="card-footer bg-dark border-top border-secondary d-flex flex-column flex-md-row justify-content-between align-items-center py-3 gap-3 rounded-bottom-4">
                 <span id="pageInfo" class="text-muted small fw-bold text-center">Hiển thị 0 bản ghi</span>
                 <nav class="overflow-auto w-100 w-md-auto d-flex justify-content-center">
-                    <ul class="pagination pagination-sm mb-0" id="paginationControls">
-                        <!-- Các nút phân trang sẽ được tạo tự động bằng JS -->
-                    </ul>
+                    <ul class="pagination pagination-sm mb-0" id="paginationControls" data-bs-theme="dark"></ul>
                 </nav>
             </div>
         </div>
+    </div>
+
+    <!-- THANH ĐIỀU HƯỚNG DƯỚI ĐÁY -->
+    <div class="bottom-nav d-lg-none">
+        <a href="index.html" class="bottom-nav-item">
+            <i class="bi bi-house-door"></i>
+            <span>Tổng quan</span>
+        </a>
+        <a href="users.html" class="bottom-nav-item">
+            <i class="bi bi-people"></i>
+            <span>Thành viên</span>
+        </a>
+        <!-- ĐÃ SỬA LỖI ICON Ở ĐÂY -->
+        <a href="logs.html" class="bottom-nav-item active">
+            <i class="bi bi-clock-history"></i>
+            <span>Nhật ký</span>
+        </a>
     </div>
 </div>
 
@@ -95,7 +124,6 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
 <script>
-    // CẤU HÌNH FIREBASE (HÃY ĐIỀN API KEY CỦA BẠN VÀO ĐÂY)
     const firebaseConfig = {
         apiKey: "AIzaSyB7w3c38FM845cYwsnz_xXVDlRnlcdIz8U", 
         authDomain: "lock-iot-2a021.firebaseapp.com",
@@ -106,54 +134,23 @@
     const database = firebase.database();
     const auth = firebase.auth();
 
-    // ==========================================
-    // QUẢN LÝ XÁC THỰC (AUTHENTICATION)
-    // ==========================================
     const loginScreen = document.getElementById('loginScreen');
     const dashboardScreen = document.getElementById('dashboardScreen');
-    const loginError = document.getElementById('loginError');
     let isDataLoaded = false;
 
-    document.getElementById('btnLogin').addEventListener('click', () => {
-        let email = document.getElementById('loginEmail').value;
-        let pass = document.getElementById('loginPass').value;
-        auth.signInWithEmailAndPassword(email, pass).catch((error) => {
-            loginError.innerText = "❌ Sai tài khoản hoặc mật khẩu!";
-            loginError.style.display = "block";
-        });
-    });
-
-    document.getElementById('btnLogout').addEventListener('click', () => {
-        auth.signOut();
-    });
-
     auth.onAuthStateChanged((user) => {
-        // Tắt màn hình loading ngay khi Firebase kiểm tra xong
         document.getElementById('authLoadingScreen').style.display = "none";
-
         if (user) {
-            // Mở Dashboard
-            loginScreen.style.display = "none";
-            dashboardScreen.style.display = "block";
-            
-            if (!isDataLoaded) {
-                if(typeof startLoadingLogsData === 'function') startLoadingLogsData();
-                isDataLoaded = true;
-            }
+            loginScreen.style.display = "none"; dashboardScreen.style.display = "block";
+            if (!isDataLoaded) { startLoadingLogsData(); isDataLoaded = true; }
         } else {
-            // Trả về màn hình đăng nhập nếu chưa có quyền
-            loginScreen.style.display = "block";
-            dashboardScreen.style.display = "none";
+            loginScreen.style.display = "block"; dashboardScreen.style.display = "none";
         }
     });
 
-    // ==========================================
-    // KHỞI CHẠY DỮ LIỆU SAU KHI ĐĂNG NHẬP
-    // ==========================================
-    let allLogs = [];            
-    let currentDisplayLogs = []; 
-    let currentPage = 1;
-    const logsPerPage = 20; 
+    document.getElementById('btnLogout').addEventListener('click', () => auth.signOut());
+
+    let allLogs = []; let currentDisplayLogs = []; let currentPage = 1; const logsPerPage = 15; 
 
     function startLoadingLogsData() {
         database.ref('SmartLock/Logs').on('value', (snapshot) => {
@@ -162,118 +159,101 @@
                 let logData = child.val();
                 if (logData && typeof logData === 'object') allLogs.push(logData);
             });
-            
             allLogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
             currentDisplayLogs = [...allLogs];
-            currentPage = 1; 
-            renderCurrentPage();
+            currentPage = 1; renderCurrentPage();
         });
+
+        // Chỉ để tải trạng thái mạng góc trên cùng
+        let lastBeatTime = 0; let serverTimeOffset = 0; 
+        database.ref('.info/serverTimeOffset').on('value', snap => serverTimeOffset = snap.val() || 0);
+        database.ref('SmartLock/System/Last_Beat').on('value', snap => { lastBeatTime = snap.val(); checkSystemStatus(); });
+
+        function checkSystemStatus() {
+            if (lastBeatTime === 0) return; 
+            let diff = (Date.now() + serverTimeOffset) - lastBeatTime;
+            let badge = document.getElementById('sysStatusBadge');
+            if (diff < 20000) { 
+                badge.className = "badge bg-success bg-opacity-25 text-success border border-success p-2 shadow-sm"; 
+                badge.innerHTML = "<i class='bi bi-wifi'></i> <span class='d-none d-sm-inline'>Online</span>"; 
+            } else {
+                badge.className = "badge bg-danger bg-opacity-25 text-danger border border-danger p-2 shadow-sm"; 
+                badge.innerHTML = "<i class='bi bi-wifi-off'></i> <span class='d-none d-sm-inline'>Offline</span>"; 
+            }
+        }
+        setInterval(checkSystemStatus, 3000);
     }
 
     function renderCurrentPage() {
-        let totalLogs = currentDisplayLogs.length;
-        let totalPages = Math.ceil(totalLogs / logsPerPage) || 1;
-        
-        if (currentPage > totalPages) currentPage = totalPages;
-        if (currentPage < 1) currentPage = 1;
+        let totalLogs = currentDisplayLogs.length; let totalPages = Math.ceil(totalLogs / logsPerPage) || 1;
+        if (currentPage > totalPages) currentPage = totalPages; if (currentPage < 1) currentPage = 1;
 
-        let startIndex = (currentPage - 1) * logsPerPage;
-        let endIndex = startIndex + logsPerPage;
+        let startIndex = (currentPage - 1) * logsPerPage; let endIndex = startIndex + logsPerPage;
         let logsToRender = currentDisplayLogs.slice(startIndex, endIndex);
 
-        let html = '';
-        let lastDateStr = '';
-        let index = startIndex + 1; 
+        let html = ''; let lastDateStr = ''; let index = startIndex + 1; 
         
         logsToRender.forEach(log => {
-            let actionStr = log.action || 'Không rõ sự kiện';
-            let userStr = log.user || 'Không rõ';
-            
+            let actionStr = log.action || 'Không rõ sự kiện'; let userStr = log.user || 'Không rõ';
             let dateObj = log.timestamp ? new Date(log.timestamp) : null;
             let dateStr = dateObj ? dateObj.toLocaleDateString('vi-VN') : 'Không rõ ngày';
             let timeStr = dateObj ? dateObj.toLocaleTimeString('vi-VN', { hour12: false }) : '--:--:--';
 
             if (dateStr !== lastDateStr) {
-                html += `
-                    <tr class="table-info border-bottom border-2 border-info">
-                        <td colspan="4" class="text-start fw-bold fs-6 text-dark py-2 ps-4 shadow-sm">
-                            📅 ${dateStr}
-                        </td>
-                    </tr>
-                `;
+                html += `<tr class="bg-secondary bg-opacity-25 border-bottom border-secondary"><td colspan="4" class="text-start fw-bold text-light py-2 ps-4"><i class="bi bi-calendar3 me-2"></i>Ngày: ${dateStr}</td></tr>`;
                 lastDateStr = dateStr; 
             }
 
-            let badgeClass = 'bg-success'; 
-            if (actionStr.includes('Cảnh báo')) badgeClass = 'bg-danger';
-            else if (actionStr.includes('Nút bấm')) badgeClass = 'bg-secondary';
-            else if (actionStr.includes('Web')) badgeClass = 'bg-primary';
-            else if (actionStr.includes('HỆ THỐNG')) badgeClass = 'bg-dark';
-            else if (actionStr.includes('khởi động')) badgeClass = 'bg-info text-dark';
+            let badgeClass = 'text-success'; let iconClass = 'bi-check-circle-fill';
+            if (actionStr.includes('Cảnh báo')) { badgeClass = 'text-danger'; iconClass = 'bi-exclamation-octagon-fill'; }
+            else if (actionStr.includes('Nút bấm')) { badgeClass = 'text-secondary'; iconClass = 'bi-record-circle'; }
+            else if (actionStr.includes('Web')) { badgeClass = 'text-primary'; iconClass = 'bi-globe2'; }
+            else if (actionStr.includes('HỆ THỐNG') || actionStr.includes('khởi động')) { badgeClass = 'text-info'; iconClass = 'bi-cpu-fill'; }
 
             html += `<tr>
                         <td class="fw-bold text-muted">${index++}</td>
-                        <td class="text-muted fw-semibold text-nowrap">${timeStr}</td>
-                        <td class="text-nowrap"><span class="badge ${badgeClass}">${actionStr}</span></td>
-                        <td class="fw-bold text-nowrap">${userStr}</td>
+                        <td class="text-light text-nowrap">${timeStr}</td>
+                        <td class="text-nowrap ${badgeClass}"><i class="bi ${iconClass} me-2"></i>${actionStr}</td>
+                        <td class="fw-bold text-light text-nowrap">${userStr}</td>
                      </tr>`;
         });
         
         if (html === '') html = '<tr><td colspan="4" class="text-muted py-5">Không tìm thấy bản ghi nào.</td></tr>';
         document.getElementById('fullLogsTableBody').innerHTML = html;
-
-        let endRecord = Math.min(endIndex, totalLogs);
-        let startRecord = totalLogs === 0 ? 0 : startIndex + 1;
-        document.getElementById('pageInfo').innerText = `Hiển thị ${startRecord} - ${endRecord} / Tổng ${totalLogs} bản ghi`;
-
+        document.getElementById('pageInfo').innerText = `Hiển thị ${totalLogs === 0 ? 0 : startIndex + 1} - ${Math.min(endIndex, totalLogs)} / Tổng ${totalLogs} sự kiện`;
         renderPagination(totalPages);
     }
 
     function renderPagination(totalPages) {
         let paginationHtml = '';
-        
-        if (totalPages <= 1) {
-            document.getElementById('paginationControls').innerHTML = '';
-            return;
-        }
+        if (totalPages <= 1) { document.getElementById('paginationControls').innerHTML = ''; return; }
 
-        let prevDisabled = (currentPage === 1) ? 'disabled' : '';
-        paginationHtml += `<li class="page-item ${prevDisabled}"><a class="page-link" href="#" onclick="changePage(${currentPage - 1})">«</a></li>`;
+        paginationHtml += `<li class="page-item ${(currentPage === 1) ? 'disabled' : ''}"><a class="page-link bg-dark text-light border-secondary" href="#" onclick="changePage(${currentPage - 1})">«</a></li>`;
         
         for (let i = 1; i <= totalPages; i++) {
             if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
-                let activeClass = (i === currentPage) ? 'active' : '';
-                paginationHtml += `<li class="page-item ${activeClass}"><a class="page-link" href="#" onclick="changePage(${i})">${i}</a></li>`;
+                let activeClass = (i === currentPage) ? 'active bg-primary border-primary' : 'bg-dark text-light border-secondary';
+                paginationHtml += `<li class="page-item"><a class="page-link ${activeClass}" href="#" onclick="changePage(${i})">${i}</a></li>`;
             } else if (i === currentPage - 2 || i === currentPage + 2) {
-                paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                paginationHtml += `<li class="page-item disabled"><span class="page-link bg-dark text-muted border-secondary">...</span></li>`;
             }
         }
-
-        let nextDisabled = (currentPage === totalPages) ? 'disabled' : '';
-        paginationHtml += `<li class="page-item ${nextDisabled}"><a class="page-link" href="#" onclick="changePage(${currentPage + 1})">»</a></li>`;
-        
+        paginationHtml += `<li class="page-item ${(currentPage === totalPages) ? 'disabled' : ''}"><a class="page-link bg-dark text-light border-secondary" href="#" onclick="changePage(${currentPage + 1})">»</a></li>`;
         document.getElementById('paginationControls').innerHTML = paginationHtml;
     }
 
-    window.changePage = function(page) {
-        currentPage = page;
-        renderCurrentPage();
-    };
+    window.changePage = function(page) { currentPage = page; renderCurrentPage(); };
 
     document.getElementById('searchInput').addEventListener('keyup', function() {
         let keyword = this.value.toLowerCase().trim();
-        
         currentDisplayLogs = allLogs.filter(log => {
             let actionMatch = (log.action || '').toLowerCase().includes(keyword);
             let userMatch = (log.user || '').toLowerCase().includes(keyword);
             let timeMatch = (log.timestamp ? new Date(log.timestamp).toLocaleDateString('vi-VN') : '').toLowerCase().includes(keyword);
             return actionMatch || userMatch || timeMatch;
         });
-        
-        currentPage = 1; 
-        renderCurrentPage();
+        currentPage = 1; renderCurrentPage();
     });
 </script>
-
 </body>
 </html>
