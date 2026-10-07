@@ -64,6 +64,7 @@
         <div class="d-flex flex-column flex-md-row justify-content-center gap-2 mb-4">
             <button id="btnOpenDoor" class="btn btn-success btn-lg disabled shadow">🔓 Mở Cửa Từ Xa</button>
             <button id="btnLockdown" class="btn btn-outline-danger btn-lg disabled shadow">🚨 Khóa Khẩn Cấp</button>
+            <button id="btnRestart" class="btn btn-warning btn-lg disabled shadow text-dark fw-bold">🔄 Khởi Động Lại</button>
             <button id="btnAddUser" class="btn btn-primary btn-lg disabled shadow" onclick="openAddUserModal()">👤 Thêm Thành Viên</button>
         </div>
 
@@ -346,7 +347,7 @@
             if (lastBeatTime === 0) return; 
             let diff = (Date.now() + serverTimeOffset) - lastBeatTime;
             let badge = document.getElementById('sysStatus');
-            let btns = [document.getElementById('btnOpenDoor'), document.getElementById('btnLockdown'), document.getElementById('btnAddUser')];
+            let btns = [document.getElementById('btnOpenDoor'), document.getElementById('btnLockdown'), document.getElementById('btnAddUser'), document.getElementById('btnRestart')];
 
             if (diff < 20000) { 
                 badge.className = "badge bg-success fs-6 p-2 shadow-sm"; badge.innerHTML = "🟢 KẾT NỐI ỔN ĐỊNH";
@@ -369,6 +370,15 @@
             }
         } else {
             database.ref('SmartLock/Control/Lockdown').set(false);
+        }
+    });
+
+    document.getElementById('btnRestart').addEventListener('click', () => {
+        if (confirm("Hệ thống khóa sẽ bị gián đoạn khoảng 10 giây để khởi động lại. Bạn có chắc chắn?")) {
+            database.ref('SmartLock/Control/Restart').set(true);
+            let btn = document.getElementById('btnRestart');
+            btn.innerHTML = "Đang gửi lệnh...";
+            setTimeout(() => btn.innerHTML = "🔄 Khởi Động Lại", 3000);
         }
     });
 
