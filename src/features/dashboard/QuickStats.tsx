@@ -1,6 +1,5 @@
 import React from 'react';
 import { DoorOpen, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
-import { Card } from '../../components/ui/Card';
 import { useSystemStatus } from '../../hooks/useSystemStatus';
 import { useLockControl } from '../../hooks/useLockControl';
 
@@ -34,58 +33,58 @@ export const QuickStats: React.FC<QuickStatsProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {/* Thẻ 1: Lượt mở hôm nay */}
-      <Card className="flex items-center gap-4 p-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+      <div className="flex items-center gap-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm transition-shadow hover:shadow-md">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-secondary-container/30 text-secondary dark:text-emerald-400 border border-secondary/20 shadow-sm">
           <DoorOpen className="h-6 w-6" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-text-secondary">
+          <p className="text-xs font-semibold uppercase tracking-wider text-outline">
             Lượt mở hôm nay
           </p>
-          <p className="text-2xl font-extrabold text-text-primary">
+          <p className="text-2xl font-extrabold tracking-tight text-on-surface">
             {doorOpensOnline}
           </p>
           {doorOpensOffline > 0 ? (
-            <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+            <p className="text-[11px] font-medium text-warning">
               +{doorOpensOffline} từ log offline
             </p>
           ) : (
-            <p className="text-[11px] text-text-muted">Thời gian thực</p>
+            <p className="text-[11px] text-outline">Thời gian thực</p>
           )}
         </div>
-      </Card>
+      </div>
 
       {/* Thẻ 2: Cảnh báo hôm nay */}
-      <Card className="flex items-center gap-4 p-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-500 border border-rose-500/30">
+      <div className="flex items-center gap-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm transition-shadow hover:shadow-md">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-error-container/40 text-error dark:text-rose-400 border border-error/20 shadow-sm">
           <ShieldAlert className="h-6 w-6" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-text-secondary">
+          <p className="text-xs font-semibold uppercase tracking-wider text-outline">
             Cảnh báo hôm nay
           </p>
-          <p className="text-2xl font-extrabold text-text-primary">
+          <p className="text-2xl font-extrabold tracking-tight text-on-surface">
             {alertsOnline}
           </p>
           {alertsOffline > 0 ? (
-            <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+            <p className="text-[11px] font-medium text-warning">
               +{alertsOffline} từ log offline
             </p>
           ) : (
-            <p className="text-[11px] text-text-muted">An ninh trong ngày</p>
+            <p className="text-[11px] text-outline">An ninh trong ngày</p>
           )}
         </div>
-      </Card>
+      </div>
 
       {/* Thẻ 3: Trạng thái kết nối */}
-      <Card className="flex items-center gap-4 p-4">
+      <div className="flex items-center gap-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm transition-shadow hover:shadow-md">
         <div
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border shadow-sm ${
             connectionState === 'online' && isClientConnected
-              ? 'bg-blue-500/15 text-blue-500 border-blue-500/30'
-              : 'bg-slate-500/15 text-slate-400 border-slate-500/30'
+              ? 'bg-primary-fixed/40 text-primary border-primary/20'
+              : 'bg-surface-container-high text-outline border-outline-variant/40'
           }`}
         >
           {connectionState === 'online' && isClientConnected ? (
@@ -95,26 +94,26 @@ export const QuickStats: React.FC<QuickStatsProps> = ({
           )}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-text-secondary">
+          <p className="text-xs font-semibold uppercase tracking-wider text-outline">
             Trạng thái kết nối
           </p>
-          <p className={`text-base font-extrabold truncate ${connectionColor}`}>
+          <p className={`text-base font-extrabold tracking-tight truncate ${connectionColor}`}>
             {connectionTitle}
           </p>
-          <p className="text-[11px] text-text-muted truncate">
+          <p className="text-[11px] text-outline truncate">
             Chế độ:{' '}
             <span
               className={
                 isLockdown
-                  ? 'font-bold text-rose-500'
-                  : 'font-semibold text-text-secondary'
+                  ? 'font-bold text-error'
+                  : 'font-semibold text-on-surface-variant'
               }
             >
               {isLockdown ? 'Đang khóa chặt' : 'Bình thường'}
             </span>
           </p>
         </div>
-      </Card>
+      </div>
     </div>
   );
 };

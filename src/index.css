@@ -5,29 +5,81 @@
 @layer base {
   :root,
   .light {
-    --bg-primary: 248 250 252;      /* slate-50 */
-    --bg-secondary: 255 255 255;    /* white */
-    --bg-elevated: 241 245 249;     /* slate-100 */
-    --text-primary: 15 23 42;       /* slate-900 */
-    --text-secondary: 71 85 105;    /* slate-600 */
-    --text-muted: 100 116 139;      /* slate-500 */
-    --border-subtle: 226 232 240;   /* slate-200 */
-    --border-strong: 203 213 225;   /* slate-300 */
+    /* Legacy aliases for backward compatibility */
+    --bg-primary: 250 248 255;      /* surface */
+    --bg-secondary: 255 255 255;    /* surface-container-lowest */
+    --bg-elevated: 242 243 255;     /* surface-container-low */
+    --text-primary: 19 27 46;       /* on-surface */
+    --text-secondary: 67 70 85;     /* on-surface-variant */
+    --text-muted: 115 118 134;      /* outline */
+    --border-subtle: 195 198 215;   /* outline-variant */
+    --border-strong: 115 118 134;   /* outline */
     --brand-primary: 37 99 235;     /* blue-600 */
     --brand-hover: 29 78 216;       /* blue-700 */
+
+    /* Stitch Material 3 Tokens - Light */
+    --surface: 250 248 255;                     /* #faf8ff */
+    --surface-container-lowest: 255 255 255;     /* #ffffff */
+    --surface-container-low: 242 243 255;        /* #f2f3ff */
+    --surface-container: 234 237 255;            /* #eaedff */
+    --surface-container-high: 226 231 255;       /* #e2e7ff */
+    --on-surface: 19 27 46;                      /* #131b2e */
+    --on-surface-variant: 67 70 85;              /* #434655 */
+    --outline: 115 118 134;                      /* #737686 */
+    --outline-variant: 195 198 215;              /* #c3c6d7 */
+    --primary: 0 74 198;                         /* #004ac6 */
+    --primary-container: 37 99 235;              /* #2563eb */
+    --primary-fixed: 219 225 255;                /* #dbe1ff */
+    --on-primary: 255 255 255;                   /* #ffffff */
+    --secondary: 0 106 97;                       /* #006a61 */
+    --secondary-container: 134 242 228;          /* #86f2e4 */
+    --on-secondary-container: 0 111 102;         /* #006f66 */
+    --tertiary: 106 30 219;                      /* #6a1edb */
+    --tertiary-fixed: 234 221 255;               /* #eaddff */
+    --error: 186 26 26;                          /* #ba1a1a */
+    --error-container: 255 218 214;              /* #ffdad6 */
+    --on-error-container: 147 0 10;              /* #93000a */
+    --warning: 180 83 9;                         /* #b45309 */
+    --warning-container: 254 243 199;            /* #fef3c7 */
   }
 
   .dark {
-    --bg-primary: 11 15 25;         /* deep slate-950 */
-    --bg-secondary: 17 24 39;       /* gray-900 */
-    --bg-elevated: 30 41 59;        /* slate-800 */
-    --text-primary: 248 250 252;    /* slate-50 */
-    --text-secondary: 148 163 184;  /* slate-400 */
-    --text-muted: 100 116 139;      /* slate-500 */
-    --border-subtle: 30 41 59;      /* slate-800 */
-    --border-strong: 51 65 85;      /* slate-700 */
+    /* Legacy aliases for backward compatibility */
+    --bg-primary: 11 15 25;         /* surface */
+    --bg-secondary: 17 24 39;       /* surface-container-lowest */
+    --bg-elevated: 22 30 46;        /* surface-container-low */
+    --text-primary: 248 250 252;    /* on-surface */
+    --text-secondary: 148 163 184;  /* on-surface-variant */
+    --text-muted: 100 116 139;      /* outline */
+    --border-subtle: 51 65 85;      /* outline-variant */
+    --border-strong: 100 116 139;   /* outline */
     --brand-primary: 59 130 246;    /* blue-500 */
     --brand-hover: 96 165 250;      /* blue-400 */
+
+    /* Stitch Material 3 Tokens - Dark */
+    --surface: 11 15 25;                         /* #0b0f19 */
+    --surface-container-lowest: 17 24 39;        /* #111827 */
+    --surface-container-low: 22 30 46;           /* #161e2e */
+    --surface-container: 30 41 59;               /* #1e293b */
+    --surface-container-high: 39 51 72;          /* #273348 */
+    --on-surface: 248 250 252;                   /* #f8fafc */
+    --on-surface-variant: 148 163 184;           /* #94a3b8 */
+    --outline: 100 116 139;                      /* #64748b */
+    --outline-variant: 51 65 85;                 /* #334155 */
+    --primary: 147 180 255;                      /* #93b4ff */
+    --primary-container: 37 99 235;              /* #2563eb */
+    --primary-fixed: 23 37 84;                   /* #172554 */
+    --on-primary: 255 255 255;                   /* #ffffff */
+    --secondary: 45 212 191;                     /* #2dd4bf */
+    --secondary-container: 19 78 74;             /* #134e4a */
+    --on-secondary-container: 153 246 228;        /* #99f6e4 */
+    --tertiary: 167 139 250;                     /* #a78bfa */
+    --tertiary-fixed: 46 16 101;                 /* #2e1065 */
+    --error: 248 113 113;                        /* #f87171 */
+    --error-container: 69 10 10;                 /* #450a0a */
+    --on-error-container: 254 202 202;           /* #fecaca */
+    --warning: 251 191 36;                       /* #fbbf24 */
+    --warning-container: 69 26 3;                /* #451a03 */
   }
 
   html {
@@ -40,6 +92,19 @@
     overflow-x: hidden;
     min-width: 320px;
   }
+}
+
+@keyframes lock-breathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+
+.animate-lock-breathe {
+  animation: lock-breathe 3s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -40,15 +40,15 @@ export const Dialog: React.FC<DialogProps> = ({
               e.preventDefault();
             }
           }}
-          className={`fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border-strong bg-bg-secondary p-6 text-text-primary shadow-2xl focus:outline-none ${maxWidthClass}`}
+          className={`fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-6 text-on-surface shadow-2xl focus:outline-none ${maxWidthClass}`}
         >
-          <div className="flex items-start justify-between gap-4 border-b border-border-subtle pb-4">
+          <div className="flex items-start justify-between gap-4 border-b border-outline-variant/30 pb-4">
             <div>
-              <RadixDialog.Title className="text-lg font-bold text-text-primary flex items-center gap-2">
+              <RadixDialog.Title className="text-lg font-bold text-on-surface flex items-center gap-2">
                 {title}
               </RadixDialog.Title>
               {description ? (
-                <RadixDialog.Description className="mt-1 text-sm text-text-secondary">
+                <RadixDialog.Description className="mt-1 text-xs text-on-surface-variant">
                   {description}
                 </RadixDialog.Description>
               ) : (
@@ -62,7 +62,7 @@ export const Dialog: React.FC<DialogProps> = ({
                 <button
                   type="button"
                   aria-label="Đóng hộp thoại"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-bg-elevated hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-outline hover:bg-surface-container-high hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <X className="h-5 w-5" />
                 </button>

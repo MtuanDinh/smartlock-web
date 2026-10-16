@@ -24,13 +24,13 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
   } = useSystemStatus();
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary pb-20 lg:pb-8">
+    <div className="min-h-screen flex flex-col bg-surface text-on-surface pb-24 lg:pb-0">
       <TopNav />
 
       {/* Thanh công cụ giả lập phần cứng (Chỉ xuất hiện khi VITE_USE_MOCK=true) */}
       {mockControls && (
         <div className="border-b border-indigo-500/30 bg-indigo-500/10 px-4 py-2 text-xs">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-1.5 font-bold text-indigo-600 dark:text-indigo-300">
               <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
               <span>Chế độ Mock (Giả lập phần cứng):</span>
@@ -41,7 +41,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
                 onClick={() =>
                   mockControls.setDeviceOnline(connectionState !== 'online')
                 }
-                className="rounded-lg border border-indigo-500/40 bg-bg-secondary px-2.5 py-1 font-semibold text-text-primary hover:bg-bg-elevated"
+                className="rounded-lg border border-indigo-500/40 bg-surface-container-lowest px-2.5 py-1 font-semibold text-on-surface hover:bg-surface-container-high"
               >
                 {connectionState === 'online'
                   ? 'Giả lập Khóa Offline'
@@ -52,7 +52,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
                 onClick={() =>
                   mockControls.setClientConnected(!isClientConnected)
                 }
-                className="rounded-lg border border-indigo-500/40 bg-bg-secondary px-2.5 py-1 font-semibold text-text-primary hover:bg-bg-elevated"
+                className="rounded-lg border border-indigo-500/40 bg-surface-container-lowest px-2.5 py-1 font-semibold text-on-surface hover:bg-surface-container-high"
               >
                 {isClientConnected
                   ? 'Giả lập Mất mạng Trình duyệt'
@@ -83,9 +83,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
       {!isClientConnected && (
         <div
           role="alert"
-          className="border-b border-amber-500/40 bg-amber-500/15 px-4 py-2.5 text-xs sm:text-sm text-amber-800 dark:text-amber-300"
+          className="border-b border-warning/40 bg-warning-container/20 px-4 py-2.5 text-xs sm:text-sm text-warning dark:text-amber-300"
         >
-          <div className="mx-auto flex max-w-5xl items-center gap-2 font-medium">
+          <div className="mx-auto flex max-w-7xl items-center gap-2 font-medium px-4 sm:px-6 lg:px-8">
             <WifiOff className="h-4 w-4 shrink-0" />
             <span>
               Điện thoại hoặc trình duyệt của bạn đang mất kết nối Internet. Mọi
@@ -101,7 +101,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
           role="alert"
           className="border-b border-rose-500/40 bg-rose-500/15 px-4 py-2.5 text-xs sm:text-sm text-rose-800 dark:text-rose-200"
         >
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-2 font-semibold">
               <RefreshCw className="h-4 w-4 shrink-0" />
               <span>
@@ -124,9 +124,15 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
         </div>
       )}
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
         {children}
       </main>
+
+      <footer className="mt-auto border-t border-outline-variant/30 py-6 text-center text-xs text-outline">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <p>© Smart Lock IoT · Dữ liệu đồng bộ qua Firebase Realtime Database</p>
+        </div>
+      </footer>
 
       <BottomNav />
     </div>
