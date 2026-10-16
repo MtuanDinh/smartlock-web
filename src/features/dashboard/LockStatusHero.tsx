@@ -174,18 +174,27 @@ export const LockStatusHero: React.FC = () => {
             />
           </div>
 
-          {/* Triple Ring Lock Visual Controller with Pulse/Ping */}
+          {/* Triple Ring Lock Visual Controller with Pulse/Ping & Aura */}
           <div className="my-5 relative flex items-center justify-center">
-            {/* Animated outer wave ring (hiệu ứng thu ra mở vào / pulse wave from prototype) */}
+            {/* 1. Luminous breathing aura halo (thu ra mở vào rõ nét) */}
             {heroConfig.hasPulse && (
               <div
-                className={`absolute h-40 w-40 sm:h-44 sm:w-44 rounded-full ${heroConfig.pingClass} animate-ping opacity-35 pointer-events-none motion-reduce:hidden`}
+                className={`absolute h-40 w-40 sm:h-44 sm:w-44 rounded-full ${heroConfig.pingClass} animate-lock-aura pointer-events-none blur-md`}
                 aria-hidden="true"
               />
             )}
 
+            {/* 2. Animated outer wave ripple (lan tỏa như radar / ping wave) */}
+            {heroConfig.hasPulse && (
+              <div
+                className={`absolute h-40 w-40 sm:h-44 sm:w-44 rounded-full ${heroConfig.pingClass} animate-ping opacity-40 pointer-events-none motion-reduce:hidden`}
+                aria-hidden="true"
+              />
+            )}
+
+            {/* 3. Main Triple Ring with breathing animation */}
             <div
-              className={`relative z-10 flex h-40 w-40 sm:h-44 sm:w-44 items-center justify-center rounded-full border-2 transition-all duration-300 ${heroConfig.circleClass} ${
+              className={`relative z-10 flex h-40 w-40 sm:h-44 sm:w-44 items-center justify-center rounded-full border-2 transition-colors duration-300 ${heroConfig.circleClass} ${
                 heroConfig.hasPulse ? 'animate-lock-breathe' : ''
               }`}
             >
