@@ -246,7 +246,7 @@ export const LogsPage: React.FC = () => {
             <div className="md:hidden">
               {paginatedGroups.map((group) => (
                 <div key={group.dateKey}>
-                  <div className="sticky top-16 z-20 flex items-center gap-2 border-y border-outline-variant/30 bg-surface-container-low/95 px-4 py-2 text-xs font-bold text-on-surface backdrop-blur-sm">
+                  <div className="flex items-center gap-2 border-y border-outline-variant/30 bg-surface-container-low px-4 py-2 text-xs font-bold text-on-surface">
                     <Calendar className="h-3.5 w-3.5 text-primary" />
                     <span>Ngày: {group.dateKey}</span>
                   </div>
@@ -314,10 +314,10 @@ export const LogsPage: React.FC = () => {
                 <tbody className="divide-y divide-outline-variant/20">
                   {paginatedGroups.map((group) => (
                     <React.Fragment key={group.dateKey}>
-                      <tr className="bg-surface-container-low/50">
+                      <tr className="bg-surface-container-low/60">
                         <td
                           colSpan={4}
-                          className="sticky top-16 z-10 border-y border-outline-variant/30 bg-surface-container-low/95 py-2.5 pl-6 pr-4 text-xs font-bold text-on-surface backdrop-blur-sm"
+                          className="border-y border-outline-variant/30 py-2.5 pl-6 pr-4 text-xs font-bold text-on-surface"
                         >
                           <span className="inline-flex items-center gap-2">
                             <Calendar className="h-3.5 w-3.5 text-primary" />
@@ -332,13 +332,13 @@ export const LogsPage: React.FC = () => {
                             key={log.id}
                             className="transition-colors hover:bg-surface-container-high/40"
                           >
-                            <td className="py-3.5 pl-6 pr-3 font-mono text-xs font-bold text-outline">
+                            <td className="py-3.5 pl-6 pr-3 font-mono text-xs font-bold text-outline align-middle">
                               {index}
                             </td>
-                            <td className="px-4 py-3.5 font-mono text-xs text-on-surface whitespace-nowrap">
+                            <td className="px-4 py-3.5 font-mono text-xs text-on-surface whitespace-nowrap align-middle">
                               {formatTimeVN(log.timestamp)}
                             </td>
-                            <td className="px-4 py-3.5">
+                            <td className="px-4 py-3.5 align-middle">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span
                                   className={`inline-flex items-center gap-2 font-semibold ${
@@ -355,7 +355,7 @@ export const LogsPage: React.FC = () => {
                                 )}
                               </div>
                             </td>
-                            <td className="py-3.5 pl-4 pr-6">
+                            <td className="py-3.5 pl-4 pr-6 align-middle">
                               {meta.isSystemLog ? (
                                 <span className="inline-flex items-center gap-1.5 text-xs">
                                   <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-semibold text-outline">
