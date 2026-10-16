@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root,
+  .light {
+    --bg-primary: 248 250 252;      /* slate-50 */
+    --bg-secondary: 255 255 255;    /* white */
+    --bg-elevated: 241 245 249;     /* slate-100 */
+    --text-primary: 15 23 42;       /* slate-900 */
+    --text-secondary: 71 85 105;    /* slate-600 */
+    --text-muted: 100 116 139;      /* slate-500 */
+    --border-subtle: 226 232 240;   /* slate-200 */
+    --border-strong: 203 213 225;   /* slate-300 */
+    --brand-primary: 37 99 235;     /* blue-600 */
+    --brand-hover: 29 78 216;       /* blue-700 */
+  }
+
+  .dark {
+    --bg-primary: 11 15 25;         /* deep slate-950 */
+    --bg-secondary: 17 24 39;       /* gray-900 */
+    --bg-elevated: 30 41 59;        /* slate-800 */
+    --text-primary: 248 250 252;    /* slate-50 */
+    --text-secondary: 148 163 184;  /* slate-400 */
+    --text-muted: 100 116 139;      /* slate-500 */
+    --border-subtle: 30 41 59;      /* slate-800 */
+    --border-strong: 51 65 85;      /* slate-700 */
+    --brand-primary: 59 130 246;    /* blue-500 */
+    --brand-hover: 96 165 250;      /* blue-400 */
+  }
+
+  html {
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+      Roboto, sans-serif;
+    overflow-x: hidden;
+  }
+
+  body {
+    overflow-x: hidden;
+    min-width: 320px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
