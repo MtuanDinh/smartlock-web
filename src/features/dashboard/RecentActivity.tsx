@@ -60,9 +60,9 @@ export const RecentActivity: React.FC = () => {
   }, [recentLogs, filter]);
 
   return (
-    <div className="flex flex-col rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm overflow-hidden">
+    <div className="card-glass flex flex-col rounded-2xl overflow-hidden shadow-sm">
       {/* Header with Title and Filter Chips */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/30 px-5 py-4 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/30 bg-surface-container-low/30 px-5 py-4 sm:px-6">
         <div className="flex items-center gap-2 font-bold text-on-surface">
           <Activity className="h-5 w-5 text-primary" />
           <span className="text-base">Hoạt động mới nhất</span>
@@ -127,59 +127,69 @@ export const RecentActivity: React.FC = () => {
             description="Lịch sử đóng mở cửa và cảnh báo sẽ xuất hiện tại đây theo thời gian thực."
           />
         ) : (
-          <ol className="relative border-l border-outline-variant/40 ml-4 space-y-5">
-            {filteredLogs.map((log) => {
-              const meta = getLogMeta(log.action);
-              return (
-                <li key={log.id} className="ml-6">
-                  <span
-                    className={`absolute -left-4 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm ${
-                      iconCircleTone[meta.colorVariant]
-                    }`}
+          <div className="relative ml-4">
+            {/* Glowing Gradient Track Line */}
+            <div
+              className="absolute left-0 top-3 bottom-3 w-0.5 bg-gradient-to-b from-primary/60 via-outline-variant/40 to-transparent"
+              aria-hidden="true"
+            />
+            <ol className="space-y-4">
+              {filteredLogs.map((log) => {
+                const meta = getLogMeta(log.action);
+                return (
+                  <li
+                    key={log.id}
+                    className="relative ml-6 rounded-xl p-2 transition-colors hover:bg-surface-container-low/50"
                   >
-                    {renderLogIcon(meta.iconName)}
-                  </span>
+                    <span
+                      className={`absolute -left-[35px] top-2 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm ring-4 ring-surface-container-lowest backdrop-blur-sm ${
+                        iconCircleTone[meta.colorVariant]
+                      }`}
+                    >
+                      {renderLogIcon(meta.iconName)}
+                    </span>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-sm font-bold text-on-surface">
-                        {meta.cleanActionText}
-                      </span>
-                      {meta.isOfflineSync && (
-                        <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning-container/30 px-2 py-0.5 text-[10px] font-bold text-warning">
-                          Offline
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-sm font-bold text-on-surface">
+                          {meta.cleanActionText}
                         </span>
-                      )}
+                        {meta.isOfflineSync && (
+                          <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning-container/30 px-2 py-0.5 text-[10px] font-bold text-warning">
+                            Offline
+                          </span>
+                        )}
+                      </div>
+
+                      <Tooltip content={formatFullDateTimeVN(log.timestamp)}>
+                        <time className="cursor-help text-xs font-medium text-outline">
+                          {formatRelativeTimeVN(log.timestamp)}
+                        </time>
+                      </Tooltip>
                     </div>
 
-                    <Tooltip content={formatFullDateTimeVN(log.timestamp)}>
-                      <time className="cursor-help text-xs font-medium text-outline">
-                        {formatRelativeTimeVN(log.timestamp)}
-                      </time>
-                    </Tooltip>
-                  </div>
-
-                  <p className="mt-0.5 text-xs text-on-surface-variant">
-                    {meta.isSystemLog ? (
-                      <>
-                        <span className="text-outline">Chi tiết: </span>
-                        <span className="font-medium text-on-surface">
-                          {log.user || 'Không rõ'}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-outline">Thực hiện: </span>
-                        <span className="font-semibold text-on-surface">
-                          {log.user || 'Không rõ'}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                </li>
-              );
-            })}
-          </ol>
+                    <p className="mt-0.5 text-xs text-on-surface-variant">
+                      {meta.isSystemLog ? (
+                        <>
+                          <span className="text-outline">Chi tiết: </span>
+                          <span className="font-medium text-on-surface">
+                            {log.user || 'Không rõ'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-outline">Thực hiện: </span>
+                          <span className="font-semibold text-on-surface">
+                            {log.user || 'Không rõ'}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
         )}
       </div>
 

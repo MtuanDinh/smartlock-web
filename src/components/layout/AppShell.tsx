@@ -24,7 +24,15 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
   } = useSystemStatus();
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface text-on-surface pb-24 lg:pb-0">
+    <div className="relative min-h-screen flex flex-col bg-surface text-on-surface pb-24 lg:pb-0 overflow-x-clip">
+      {/* Top Ambient Glow (Linear/Vercel style) */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-96 overflow-hidden opacity-40 dark:opacity-75"
+        aria-hidden="true"
+      >
+        <div className="mx-auto h-full max-w-7xl bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(37,99,235,0.18),transparent)]" />
+      </div>
+
       <TopNav />
 
       {/* Thanh công cụ giả lập phần cứng (Chỉ xuất hiện khi VITE_USE_MOCK=true) */}

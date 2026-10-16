@@ -12,7 +12,7 @@ export const BottomNav: React.FC = () => {
   return (
     <nav
       aria-label="Điều hướng di động"
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-md lg:hidden pb-[env(safe-area-inset-bottom)] shadow-lg shadow-black/5"
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl lg:hidden pb-[env(safe-area-inset-bottom)] shadow-lg shadow-black/10 dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
     >
       <div className="mx-auto grid max-w-md grid-cols-3 px-3 py-2">
         {navItems.map((item) => {
@@ -23,7 +23,7 @@ export const BottomNav: React.FC = () => {
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-2xl py-1 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                `flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-2xl py-1 text-xs font-semibold transition-all duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                   isActive
                     ? 'text-primary'
                     : 'text-on-surface-variant hover:text-on-surface'

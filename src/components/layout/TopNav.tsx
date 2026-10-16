@@ -22,7 +22,7 @@ export const TopNav: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl shadow-xs dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo & Brand Title */}
         <div className="flex items-center gap-3">
@@ -47,7 +47,7 @@ export const TopNav: React.FC = () => {
         {/* Center Pill Navigation (Desktop Only) */}
         <nav
           aria-label="Điều hướng chính"
-          className="hidden lg:flex items-center gap-1 rounded-full border border-outline-variant/30 bg-surface-container-low/80 p-1"
+          className="hidden lg:flex items-center gap-1 rounded-full border border-outline-variant/30 bg-surface-container-low/80 p-1 backdrop-blur-md shadow-xs"
         >
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -57,7 +57,7 @@ export const TopNav: React.FC = () => {
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
-                  `inline-flex min-h-[36px] items-center gap-2 rounded-full px-5 py-1.5 text-xs font-bold transition-all duration-200 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                  `inline-flex min-h-[36px] items-center gap-2 rounded-full px-5 py-1.5 text-xs font-bold transition-all duration-150 active:scale-95 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                     isActive
                       ? 'bg-primary-container text-white shadow-sm shadow-blue-500/30'
                       : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'

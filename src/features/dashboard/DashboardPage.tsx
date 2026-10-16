@@ -33,7 +33,7 @@ export const DashboardPage: React.FC = () => {
           <RecentActivity />
 
           {/* Member Quick Access Card */}
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm transition-shadow hover:shadow-md">
+          <div className="card-glass card-glass-interactive flex flex-wrap items-center justify-between gap-4 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-fixed/40 text-primary border border-primary/20 shadow-sm">
                 <Users className="h-5 w-5" />

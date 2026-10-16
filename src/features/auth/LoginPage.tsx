@@ -22,9 +22,17 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-surface px-4 py-6 sm:px-6 text-on-surface">
+    <div className="relative min-h-screen flex flex-col justify-between bg-surface px-4 py-6 sm:px-6 text-on-surface overflow-x-clip">
+      {/* Top Ambient Glow */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-96 overflow-hidden opacity-40 dark:opacity-75"
+        aria-hidden="true"
+      >
+        <div className="mx-auto h-full max-w-7xl bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(37,99,235,0.22),transparent)]" />
+      </div>
+
       {/* Top Bar with Theme Toggle */}
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between">
+      <div className="relative z-10 mx-auto flex w-full max-w-5xl items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-container text-white shadow-sm shadow-blue-500/30">
             <ShieldCheck className="h-4 w-4" />
@@ -37,8 +45,8 @@ export const LoginPage: React.FC = () => {
       </div>
 
       {/* Main Dual Card */}
-      <div className="mx-auto w-full max-w-[1020px] my-auto py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-2xl overflow-hidden">
+      <div className="relative z-10 mx-auto w-full max-w-[1020px] my-auto py-6">
+        <div className="card-glass grid grid-cols-1 lg:grid-cols-12 rounded-2xl shadow-2xl overflow-hidden">
           {/* Left Column: IoT Security Brand Visual (Static, honest - Hidden on Mobile) */}
           <div className="hidden lg:flex lg:col-span-5 bg-surface-container-low/70 dark:bg-surface-container/50 p-6 sm:p-8 flex-col justify-between border-r border-outline-variant/30">
             <div>
@@ -193,7 +201,7 @@ export const LoginPage: React.FC = () => {
                   size="lg"
                   fullWidth
                   isLoading={isSubmitting}
-                  className="h-12 font-bold shadow-lg shadow-blue-500/25"
+                  className="h-12 font-bold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:shadow-xl active:scale-[0.98] transition-all"
                 >
                   ĐĂNG NHẬP VÀO HỆ THỐNG
                 </Button>

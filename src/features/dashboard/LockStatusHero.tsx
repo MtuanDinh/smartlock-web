@@ -63,6 +63,7 @@ export const LockStatusHero: React.FC = () => {
     coreClass: string;
     coreSub?: string;
     pingClass?: string;
+    bgGlowClass?: string;
     hasPulse: boolean;
   };
 
@@ -76,6 +77,7 @@ export const LockStatusHero: React.FC = () => {
       icon: <Loader2 className="h-10 w-10 sm:h-12 sm:w-12 animate-spin text-primary" />,
       coreClass: 'bg-surface-container-high text-outline',
       coreSub: 'Đang tải',
+      bgGlowClass: 'bg-primary/5',
       hasPulse: false,
     };
   } else if (!isClientConnected) {
@@ -89,6 +91,7 @@ export const LockStatusHero: React.FC = () => {
       icon: <WifiOff className="h-10 w-10 sm:h-12 sm:w-12 text-white" />,
       coreClass: 'bg-warning text-white shadow-lg shadow-amber-500/30',
       coreSub: 'Mất mạng',
+      bgGlowClass: 'bg-amber-500/15',
       hasPulse: false,
     };
   } else if (connectionState === 'offline') {
@@ -101,6 +104,7 @@ export const LockStatusHero: React.FC = () => {
       icon: <WifiOff className="h-10 w-10 sm:h-12 sm:w-12 text-outline" />,
       coreClass: 'bg-surface-container-high text-outline',
       coreSub: 'Ngoại tuyến',
+      bgGlowClass: 'bg-slate-500/10',
       hasPulse: false,
     };
   } else if (remoteOpenAck) {
@@ -111,9 +115,10 @@ export const LockStatusHero: React.FC = () => {
       titleClass: 'text-emerald-600 dark:text-emerald-400',
       subtext: 'Ổ khóa đã nhận lệnh mở và kích hoạt relay trong 3 giây.',
       icon: <Unlock className="h-10 w-10 sm:h-12 sm:w-12 text-white" />,
-      coreClass: 'bg-gradient-to-tr from-secondary to-secondary-container text-white shadow-lg shadow-emerald-500/30',
+      coreClass: 'bg-gradient-to-tr from-emerald-600 via-teal-500 to-emerald-400 text-white shadow-lg shadow-emerald-500/35',
       coreSub: 'Đã mở khóa',
       pingClass: 'bg-emerald-500/30',
+      bgGlowClass: 'bg-emerald-500/25',
       hasPulse: true,
     };
   } else if (isLockdown) {
@@ -125,9 +130,10 @@ export const LockStatusHero: React.FC = () => {
       subtext:
         'Chế độ an ninh cao nhất: Đã vô hiệu hóa bàn phím số và đầu đọc thẻ RFID.',
       icon: <ShieldAlert className="h-10 w-10 sm:h-12 sm:w-12 text-white" />,
-      coreClass: 'bg-gradient-to-tr from-error to-rose-600 text-white shadow-lg shadow-red-500/30',
+      coreClass: 'bg-gradient-to-tr from-rose-600 via-red-600 to-pink-500 text-white shadow-lg shadow-red-500/35',
       coreSub: 'Khóa chặt',
       pingClass: 'bg-error/30',
+      bgGlowClass: 'bg-rose-500/25',
       hasPulse: true,
     };
   } else {
@@ -138,9 +144,10 @@ export const LockStatusHero: React.FC = () => {
       titleClass: 'text-on-surface',
       subtext: 'Hệ thống an ninh đang hoạt động bình thường. Mở khóa sẽ nhả chốt 3 giây.',
       icon: <Lock className="h-10 w-10 sm:h-12 sm:w-12 text-white" />,
-      coreClass: 'bg-gradient-to-tr from-primary to-primary-container text-white shadow-lg shadow-blue-500/25',
+      coreClass: 'bg-gradient-to-tr from-blue-600 via-primary to-blue-400 text-white shadow-lg shadow-blue-500/30',
       coreSub: 'Đã chốt',
       pingClass: 'bg-primary/20',
+      bgGlowClass: 'bg-blue-500/15',
       hasPulse: true,
     };
   }
@@ -165,8 +172,14 @@ export const LockStatusHero: React.FC = () => {
 
   return (
     <>
-      <div className="flex h-full flex-col justify-between rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 sm:p-8 text-center shadow-sm">
-        <div className="flex flex-col items-center">
+      <div className="card-glass relative overflow-hidden flex h-full flex-col justify-between rounded-2xl p-6 sm:p-8 text-center shadow-sm">
+        {/* Ambient Top Glow for Hero */}
+        <div
+          className={`pointer-events-none absolute inset-x-0 -top-16 h-48 rounded-full ${heroConfig.bgGlowClass || 'bg-blue-500/15'} blur-3xl transition-colors duration-500`}
+          aria-hidden="true"
+        />
+
+        <div className="flex flex-col items-center relative z-10">
           <div className="mb-4">
             <LastBeatCounter
               lastBeat={lastBeat}
@@ -224,7 +237,7 @@ export const LockStatusHero: React.FC = () => {
         </div>
 
         {/* Hành động chính: Mở khóa từ xa */}
-        <div className="mt-7 space-y-4">
+        <div className="mt-7 space-y-4 relative z-10">
           <div>
             <Button
               variant="primary"
@@ -234,7 +247,7 @@ export const LockStatusHero: React.FC = () => {
               isLoading={isSendingOpen}
               disabledTooltip={disabledReason}
               onClick={handleOpenDoorClick}
-              className="h-14 rounded-xl text-base font-bold shadow-lg shadow-blue-500/25 transition-all"
+              className="h-14 rounded-xl text-base font-bold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:shadow-xl active:scale-[0.98] transition-all duration-150"
               leftIcon={
                 remoteOpenAck ? (
                   <Send className="h-5 w-5" />
@@ -252,7 +265,7 @@ export const LockStatusHero: React.FC = () => {
           </div>
 
           {/* Nhóm hành động hệ thống / khẩn cấp */}
-          <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low/60 p-3 sm:p-4">
+          <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low/50 p-3 sm:p-4 shadow-sm backdrop-blur-sm">
             <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-outline">
               Điều khiển hệ thống &amp; khẩn cấp
             </p>

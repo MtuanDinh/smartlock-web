@@ -126,9 +126,9 @@ export const LogsPage: React.FC = () => {
       />
 
       {/* 2. Khung Quản lý Nhật ký Sự kiện */}
-      <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm overflow-hidden">
+      <div className="card-glass rounded-2xl overflow-hidden shadow-sm">
         {/* Header & Thanh công cụ */}
-        <div className="border-b border-outline-variant/30 p-5 sm:px-6 space-y-4">
+        <div className="border-b border-outline-variant/30 bg-surface-container-low/20 p-5 sm:px-6 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-container text-white shadow-sm shadow-blue-500/25">
@@ -156,7 +156,7 @@ export const LogsPage: React.FC = () => {
                   aria-label="Tìm kiếm nhật ký"
                   className="min-h-[38px] w-full rounded-xl border border-outline-variant/40 bg-surface-container-low pl-8 pr-8 py-1.5 text-xs text-on-surface placeholder:text-outline focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                 />
-                {searchTerm && (
+                {searchTerm ? (
                   <button
                     type="button"
                     onClick={() => setSearchTerm('')}
@@ -165,6 +165,10 @@ export const LogsPage: React.FC = () => {
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
+                ) : (
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-outline-variant/40 bg-surface-container-high/60 px-1.5 py-0.5 text-[10px] font-mono text-outline font-semibold">
+                    /
+                  </span>
                 )}
               </div>
 
@@ -246,9 +250,11 @@ export const LogsPage: React.FC = () => {
             <div className="md:hidden">
               {paginatedGroups.map((group) => (
                 <div key={group.dateKey}>
-                  <div className="flex items-center gap-2 border-y border-outline-variant/30 bg-surface-container-low px-4 py-2 text-xs font-bold text-on-surface">
-                    <Calendar className="h-3.5 w-3.5 text-primary" />
-                    <span>Ngày: {group.dateKey}</span>
+                  <div className="flex items-center gap-2 border-y border-outline-variant/30 bg-surface-container-low/60 px-4 py-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-outline-variant/40 bg-surface-container-high/80 px-2.5 py-0.5 text-[11px] font-bold text-on-surface shadow-xs">
+                      <Calendar className="h-3 w-3 text-primary" />
+                      <span>Ngày: {group.dateKey}</span>
+                    </span>
                   </div>
                   <div className="divide-y divide-outline-variant/20">
                     {group.items.map(({ log, index }) => {
@@ -314,12 +320,12 @@ export const LogsPage: React.FC = () => {
                 <tbody className="divide-y divide-outline-variant/20">
                   {paginatedGroups.map((group) => (
                     <React.Fragment key={group.dateKey}>
-                      <tr className="bg-surface-container-low/60">
+                      <tr className="bg-surface-container-low/40">
                         <td
                           colSpan={4}
-                          className="border-y border-outline-variant/30 py-2.5 pl-6 pr-4 text-xs font-bold text-on-surface"
+                          className="border-y border-outline-variant/30 py-2.5 pl-6 pr-4"
                         >
-                          <span className="inline-flex items-center gap-2">
+                          <span className="inline-flex items-center gap-2 rounded-full border border-outline-variant/40 bg-surface-container-high/80 px-3 py-1 text-xs font-bold text-on-surface shadow-xs">
                             <Calendar className="h-3.5 w-3.5 text-primary" />
                             <span>Ngày: {group.dateKey}</span>
                           </span>
@@ -330,7 +336,7 @@ export const LogsPage: React.FC = () => {
                         return (
                           <tr
                             key={log.id}
-                            className="transition-colors hover:bg-surface-container-high/40"
+                            className="transition-colors hover:bg-primary/[0.04]"
                           >
                             <td className="py-3.5 pl-6 pr-3 font-mono text-xs font-bold text-outline align-middle">
                               {index}

@@ -28,7 +28,7 @@ export const Dialog: React.FC<DialogProps> = ({
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm transition-opacity duration-200" />
+        <RadixDialog.Overlay className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md transition-opacity duration-200" />
         <RadixDialog.Content
           onInteractOutside={(e) => {
             if (preventOutsideClose) {
@@ -40,7 +40,7 @@ export const Dialog: React.FC<DialogProps> = ({
               e.preventDefault();
             }
           }}
-          className={`fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-6 text-on-surface shadow-2xl focus:outline-none ${maxWidthClass}`}
+          className={`card-glass fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 text-on-surface shadow-2xl focus:outline-none transition-all duration-200 ${maxWidthClass}`}
         >
           <div className="flex items-start justify-between gap-4 border-b border-outline-variant/30 pb-4">
             <div>
@@ -73,7 +73,7 @@ export const Dialog: React.FC<DialogProps> = ({
           <div className="py-5">{children}</div>
 
           {footer && (
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-border-subtle pt-4">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-outline-variant/30 pt-4">
               {footer}
             </div>
           )}

@@ -34,6 +34,27 @@ function getInitials(name: string): string {
   return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase();
 }
 
+const avatarGradients = [
+  'bg-gradient-to-tr from-blue-600 to-indigo-500 text-white border-blue-400/30 shadow-blue-500/20',
+  'bg-gradient-to-tr from-emerald-600 to-teal-500 text-white border-emerald-400/30 shadow-emerald-500/20',
+  'bg-gradient-to-tr from-purple-600 to-pink-500 text-white border-purple-400/30 shadow-purple-500/20',
+  'bg-gradient-to-tr from-amber-600 to-orange-500 text-white border-amber-400/30 shadow-amber-500/20',
+  'bg-gradient-to-tr from-cyan-600 to-blue-500 text-white border-cyan-400/30 shadow-cyan-500/20',
+  'bg-gradient-to-tr from-rose-600 to-red-500 text-white border-rose-400/30 shadow-rose-500/20',
+];
+
+function getAvatarStyle(name: string, isDisabled: boolean): string {
+  if (isDisabled) {
+    return 'bg-surface-container-high text-outline border-outline-variant/40';
+  }
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % avatarGradients.length;
+  return avatarGradients[index];
+}
+
 type UserFilterTab = 'all' | 'active' | 'has_card' | 'disabled';
 
 export const UsersPage: React.FC = () => {
@@ -131,15 +152,16 @@ export const UsersPage: React.FC = () => {
       {/* 1. 3 KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* KPI 1: Tổng thành viên */}
-        <div className="flex items-center gap-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm transition-shadow hover:shadow-md">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed/40 text-primary border border-primary/20 shadow-sm">
+        <div className="card-glass card-glass-interactive rounded-2xl p-5 relative overflow-hidden group flex items-center gap-4">
+          <div className="pointer-events-none absolute -right-6 -bottom-6 h-28 w-28 rounded-full bg-blue-500/10 blur-xl group-hover:bg-blue-500/20 transition-all duration-300" aria-hidden="true" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed/40 text-primary border border-primary/20 shadow-sm relative z-10">
             <Users className="h-6 w-6" />
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wider text-outline">
+          <div className="min-w-0 relative z-10">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-outline">
               Tổng thành viên
             </p>
-            <p className="text-2xl font-extrabold tracking-tight text-on-surface">
+            <p className="text-3xl font-extrabold tracking-tight font-mono text-on-surface">
               {totalCount}
             </p>
             <p className="text-[11px] font-medium text-secondary dark:text-emerald-400 truncate">
@@ -149,16 +171,17 @@ export const UsersPage: React.FC = () => {
         </div>
 
         {/* KPI 2: Thẻ RFID đã gán */}
-        <div className="flex items-center gap-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm transition-shadow hover:shadow-md">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-tertiary-fixed/50 text-tertiary border border-tertiary/20 shadow-sm">
+        <div className="card-glass card-glass-interactive rounded-2xl p-5 relative overflow-hidden group flex items-center gap-4">
+          <div className="pointer-events-none absolute -right-6 -bottom-6 h-28 w-28 rounded-full bg-purple-500/10 blur-xl group-hover:bg-purple-500/20 transition-all duration-300" aria-hidden="true" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-tertiary-fixed/50 text-tertiary border border-tertiary/20 shadow-sm relative z-10">
             <CreditCard className="h-6 w-6" />
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wider text-outline">
+          <div className="min-w-0 relative z-10">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-outline">
               Thẻ RFID đã gán
             </p>
-            <p className="text-2xl font-extrabold tracking-tight text-on-surface">
-              {cardsCount} <span className="text-sm font-semibold text-outline">/ {totalCount}</span>
+            <p className="text-3xl font-extrabold tracking-tight font-mono text-on-surface">
+              {cardsCount} <span className="text-sm font-semibold text-outline font-sans">/ {totalCount}</span>
             </p>
             <p className="text-[11px] text-outline truncate">
               Chuẩn mã hóa MIFARE 13.56 MHz
@@ -167,9 +190,10 @@ export const UsersPage: React.FC = () => {
         </div>
 
         {/* KPI 3: Trạng thái đồng bộ */}
-        <div className="flex items-center gap-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm transition-shadow hover:shadow-md">
+        <div className="card-glass card-glass-interactive rounded-2xl p-5 relative overflow-hidden group flex items-center gap-4">
+          <div className="pointer-events-none absolute -right-6 -bottom-6 h-28 w-28 rounded-full bg-emerald-500/10 blur-xl group-hover:bg-emerald-500/20 transition-all duration-300" aria-hidden="true" />
           <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border shadow-sm ${
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border shadow-sm relative z-10 ${
               hasUnsyncedChanges
                 ? 'bg-warning-container/40 text-warning border-warning/30'
                 : 'bg-secondary-container/30 text-secondary dark:text-emerald-400 border-secondary/20'
@@ -181,8 +205,8 @@ export const UsersPage: React.FC = () => {
               <CheckCircle2 className="h-6 w-6" />
             )}
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wider text-outline">
+          <div className="min-w-0 relative z-10">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-outline">
               Trạng thái đồng bộ
             </p>
             <p
@@ -200,9 +224,9 @@ export const UsersPage: React.FC = () => {
       </div>
 
       {/* 2. Khung Quản lý Thành viên */}
-      <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm overflow-hidden">
+      <div className="card-glass rounded-2xl overflow-hidden shadow-sm">
         {/* Top Header of Card */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/30 p-5 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/30 bg-surface-container-low/20 p-5 sm:px-6">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-container text-white shadow-sm shadow-blue-500/25">
               <Users className="h-5 w-5" />
@@ -355,11 +379,10 @@ export const UsersPage: React.FC = () => {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-bold text-sm border shadow-sm ${
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-bold text-sm border shadow-sm ${getAvatarStyle(
+                            user.name,
                             isDisabled
-                              ? 'bg-surface-container-high text-outline border-outline-variant/40'
-                              : 'bg-primary-fixed text-primary border-primary/20'
-                          }`}
+                          )}`}
                         >
                           {getInitials(user.name)}
                         </div>
@@ -467,8 +490,9 @@ export const UsersPage: React.FC = () => {
                         </span>
                         {user.card ? (
                           <div className="flex items-center gap-1 flex-wrap">
-                            <span className="font-mono text-[11px] font-bold text-tertiary bg-tertiary-fixed/30 px-2 py-0.5 rounded-full">
-                              {user.card}
+                            <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-tertiary bg-tertiary-fixed/30 border border-tertiary/20 px-2 py-0.5 rounded-full">
+                              <CreditCard className="h-3 w-3" />
+                              <span>{user.card}</span>
                             </span>
                             <button
                               type="button"
@@ -532,11 +556,10 @@ export const UsersPage: React.FC = () => {
                         <td className="py-4 pl-6 pr-4">
                           <div className="flex items-center gap-3">
                             <div
-                              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold text-xs border shadow-sm ${
+                              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold text-xs border shadow-sm ${getAvatarStyle(
+                                user.name,
                                 isDisabled
-                                  ? 'bg-surface-container-high text-outline border-outline-variant/40'
-                                  : 'bg-primary-fixed text-primary border-primary/20'
-                              }`}
+                              )}`}
                             >
                               {getInitials(user.name)}
                             </div>
@@ -627,8 +650,9 @@ export const UsersPage: React.FC = () => {
                         <td className="px-4 py-4 text-center">
                           {user.card ? (
                             <div className="inline-flex items-center justify-center gap-2">
-                              <span className="font-mono text-xs font-bold text-tertiary bg-tertiary-fixed/30 border border-tertiary/20 px-2.5 py-1 rounded-full">
-                                {user.card}
+                              <span className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-tertiary bg-tertiary-fixed/30 border border-tertiary/20 px-2.5 py-1 rounded-full shadow-xs">
+                                <CreditCard className="h-3.5 w-3.5" />
+                                <span>{user.card}</span>
                               </span>
                               <button
                                 type="button"
