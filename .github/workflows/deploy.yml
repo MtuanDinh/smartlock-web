@@ -39,30 +39,30 @@ jobs:
 
       - name: Verify required VITE_FIREBASE_* variables are non-empty
         env:
-          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || 'AIzaSyB7w3c38FM845cYwsnz_xXVDlRnlcdIz8U' }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN || 'lock-iot-2a021.firebaseapp.com' }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID || 'lock-iot-2a021' }}
+          VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL || 'https://lock-iot-2a021-default-rtdb.asia-southeast1.firebasedatabase.app' }}
         run: |
           missing=0
           for var_name in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_DATABASE_URL; do
             val="${!var_name}"
             if [ -z "$val" ]; then
-              echo "::error::Missing required GitHub Repository Variable: $var_name"
+              echo "::error::Missing required Firebase variable: $var_name"
               missing=1
             fi
           done
           if [ "$missing" -ne 0 ]; then
-            echo "Build failed: One or more VITE_FIREBASE_* repository variables are empty."
+            echo "Build failed: One or more VITE_FIREBASE_* variables are empty."
             exit 1
           fi
 
       - name: Build production bundle
         env:
-          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || 'AIzaSyB7w3c38FM845cYwsnz_xXVDlRnlcdIz8U' }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN || 'lock-iot-2a021.firebaseapp.com' }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID || 'lock-iot-2a021' }}
+          VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL || 'https://lock-iot-2a021-default-rtdb.asia-southeast1.firebasedatabase.app' }}
           VITE_ONLINE_THRESHOLD_MS: ${{ vars.VITE_ONLINE_THRESHOLD_MS || '35000' }}
           VITE_USE_MOCK: 'false'
         run: npm run build
