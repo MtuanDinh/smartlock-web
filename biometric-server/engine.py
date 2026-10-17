@@ -640,7 +640,7 @@ class BiometricEngine:
         # Ưu tiên 1: OpenCV 5.0 YuNet DNN FaceDetectorYN (kèm 5 điểm mốc giải phẫu)
         if self.yunet_detector is not None:
             try:
-                max_dim = 480
+                max_dim = 640
                 scale = min(1.0, float(max_dim) / float(max(width, height)))
                 work_w = max(64, int(round(width * scale)))
                 work_h = max(64, int(round(height * scale)))
@@ -805,19 +805,19 @@ class BiometricEngine:
         # --- THUẬT TOÁN 2: Kiểm tra căn tâm trong Khung Mô Hình Bầu Dục ---
         pass_center = True
         center_reason = ""
-        if cx < 0.22:
+        if cx < 0.18:
             pass_center = False
             center_reason = "Khuôn mặt đang lệch sang TRÁI khung mô hình."
             val_center = f"Lệch TRÁI (X:{int(cx * 100)}%)"
-        elif cx > 0.78:
+        elif cx > 0.82:
             pass_center = False
             center_reason = "Khuôn mặt đang lệch sang PHẢI khung mô hình."
             val_center = f"Lệch PHẢI (X:{int(cx * 100)}%)"
-        elif cy < 0.16:
+        elif cy < 0.12:
             pass_center = False
             center_reason = "Khuôn mặt đang ở QUÁ CAO so với khung mô hình."
             val_center = f"Quá CAO (Y:{int(cy * 100)}%)"
-        elif cy > 0.84:
+        elif cy > 0.88:
             pass_center = False
             center_reason = "Khuôn mặt đang ở QUÁ THẤP so với khung mô hình."
             val_center = f"Quá THẤP (Y:{int(cy * 100)}%)"
@@ -827,14 +827,14 @@ class BiometricEngine:
         # --- THUẬT TOÁN 3: Kiểm tra khoảng cách & tỷ lệ kích thước khuôn mặt ---
         pass_size = True
         size_reason = ""
-        if size_ratio < 0.16:
+        if size_ratio < 0.12:
             pass_size = False
-            size_reason = "Khuôn mặt hơi nhỏ. Hãy đưa điện thoại lại gần hơn (cách 25–35 cm)."
-            val_size = f"Quá xa ({int(size_ratio * 100)}% < 16%)"
-        elif size_ratio > 0.88:
+            size_reason = "Khuôn mặt hơi nhỏ. Hãy đứng gần lại một chút (khoảng 40–60 cm)."
+            val_size = f"Quá xa ({int(size_ratio * 100)}% < 12%)"
+        elif size_ratio > 0.90:
             pass_size = False
-            size_reason = "Khuôn mặt quá sát camera. Hãy đưa điện thoại ra xa một chút."
-            val_size = f"Quá gần ({int(size_ratio * 100)}% > 88%)"
+            size_reason = "Khuôn mặt quá sát camera. Hãy đứng lùi lại một chút."
+            val_size = f"Quá gần ({int(size_ratio * 100)}% > 90%)"
         else:
             val_size = f"Đạt chuẩn ({int(size_ratio * 100)}% khung)"
 
@@ -863,7 +863,7 @@ class BiometricEngine:
 
         # Pitch metric: tỷ lệ độ cao mũi giữa trục mắt và trục miệng
         # Mũi nhích lên trục mắt -> pitch <= 0.50 (Ngẩng lên)
-        # Mũi chúc xuống trục miệng -> pitch >= 0.55 (Cúi xuống)
+        # Mũi chúc xuống trục miệng -> pitch >= 0.54 (Cúi xuống)
         pitch_metric = float((nt_y - eye_mid_y) / face_vert)
 
         pass_pose = True
@@ -893,28 +893,28 @@ class BiometricEngine:
                 val_pose = f"Trực diện (Góc {round(roll_deg, 1)}°)"
         elif pose_key == "left":
             pose_name = "4. Góc quay sang Trái"
-            if yaw_metric < 0.14:
+            if yaw_metric < 0.12:
                 pass_pose = False
                 pose_reason = "Hãy quay mặt nhẹ sang TRÁI (khoảng 15°–20°)."
-                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} cần ≥ +0.14)"
+                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} cần ≥ +0.12)"
             elif pitch_metric < 0.32 or pitch_metric > 0.68:
                 pass_pose = False
                 pose_reason = "Hãy giữ độ cao đầu vừa phải khi quay sang TRÁI."
                 val_pose = f"Lệch ngẩng/cúi ({pitch_metric:.2f})"
             else:
-                val_pose = f"Đạt góc Trái (Yaw {yaw_metric:+.2f} ≥ +0.14)"
+                val_pose = f"Đạt góc Trái (Yaw {yaw_metric:+.2f} ≥ +0.12)"
         elif pose_key == "right":
             pose_name = "4. Góc quay sang Phải"
-            if yaw_metric > -0.14:
+            if yaw_metric > -0.12:
                 pass_pose = False
                 pose_reason = "Hãy quay mặt nhẹ sang PHẢI (khoảng 15°–20°)."
-                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} cần ≤ -0.14)"
+                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} cần ≤ -0.12)"
             elif pitch_metric < 0.32 or pitch_metric > 0.68:
                 pass_pose = False
                 pose_reason = "Hãy giữ độ cao đầu vừa phải khi quay sang PHẢI."
                 val_pose = f"Lệch ngẩng/cúi ({pitch_metric:.2f})"
             else:
-                val_pose = f"Đạt góc Phải (Yaw {yaw_metric:+.2f} ≤ -0.14)"
+                val_pose = f"Đạt góc Phải (Yaw {yaw_metric:+.2f} ≤ -0.12)"
         elif pose_key == "up":
             pose_name = "4. Góc ngẩng Lên trên"
             if pitch_metric > 0.50:
@@ -929,16 +929,16 @@ class BiometricEngine:
                 val_pose = f"Đạt góc Ngẩng (Pitch {pitch_metric:.2f} ≤ 0.50)"
         elif pose_key == "down":
             pose_name = "4. Góc cúi Xuống dưới"
-            if pitch_metric < 0.55:
+            if pitch_metric < 0.54:
                 pass_pose = False
                 pose_reason = "Hãy cúi nhẹ đầu XUỐNG DƯỚI (khoảng 10°–20°)."
-                val_pose = f"Chưa đủ cúi (Pitch {pitch_metric:.2f} cần ≥ 0.55)"
+                val_pose = f"Chưa đủ cúi (Pitch {pitch_metric:.2f} cần ≥ 0.54)"
             elif abs(yaw_metric) > 0.28:
                 pass_pose = False
                 pose_reason = "Hãy giữ mặt ở giữa khi cúi đầu xuống dưới."
                 val_pose = f"Lệch quay ngang ({yaw_metric:+.2f})"
             else:
-                val_pose = f"Đạt góc Cúi (Pitch {pitch_metric:.2f} ≥ 0.55)"
+                val_pose = f"Đạt góc Cúi (Pitch {pitch_metric:.2f} ≥ 0.54)"
         else:  # "any"
             pose_name = "4. Tư thế khuôn mặt"
             val_pose = f"Hợp lệ (Yaw {yaw_metric:+.2f} | Pitch {pitch_metric:.2f})"
@@ -1158,6 +1158,15 @@ class BiometricEngine:
             aligned_face = self.sface_recognizer.alignCrop(
                 bgr_full, np.asarray(orig_row, dtype=np.float32)
             )
+            # Tiền xử lý cân bằng sáng thích ứng CLAHE trên kênh Luma (Y trong YCrCb)
+            # Triệt tiêu bóng đổ một bên mặt, làm rõ ngũ quan trong môi trường ngược sáng hoặc ánh sáng không đều
+            try:
+                ycrcb = cv2.cvtColor(aligned_face, cv2.COLOR_BGR2YCrCb)
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                ycrcb[:, :, 0] = clahe.apply(ycrcb[:, :, 0])
+                aligned_face = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
+            except Exception:
+                pass
             feat = self.sface_recognizer.feature(aligned_face).flatten()
             return l2_normalize(feat), meta
 
