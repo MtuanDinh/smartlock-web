@@ -2,6 +2,7 @@ import type {
   AuthUser,
   BiometricEnrollCommand,
   BiometricEnrollTarget,
+  BiometricSystemStatus,
   LogEntry,
   MutationResult,
   User,
@@ -32,6 +33,9 @@ export interface SmartLockService extends LearnCardServiceAdapter {
   subscribeServerTimeOffset: (cb: (offsetMs: number) => void) => () => void;
   subscribeLastBeat: (cb: (lastBeatMs: number | null) => void) => () => void;
   subscribeUnsyncedChanges: (cb: (hasUnsynced: boolean) => void) => () => void;
+  subscribeBiometricSystem: (
+    cb: (status: BiometricSystemStatus) => void
+  ) => () => void;
 
   // Lock Control
   subscribeLockdown: (cb: (isLockdown: boolean) => void) => () => void;

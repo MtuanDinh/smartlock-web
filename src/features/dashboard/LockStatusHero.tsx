@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useSystemStatus } from '../../hooks/useSystemStatus';
 import { useLockControl } from '../../hooks/useLockControl';
+import { useBiometricSystem } from '../../hooks/useBiometricSystem';
 import { LastBeatCounter } from '../../components/layout/LastBeatCounter';
 import { Button } from '../../components/ui/Button';
 import { Switch } from '../../components/ui/Switch';
@@ -40,10 +41,23 @@ export const LockStatusHero: React.FC = () => {
     restartSystem,
   } = useLockControl();
 
+  const { kioskUrl: dynamicKioskUrl, online: isBioServerOnline } =
+    useBiometricSystem();
+
   const [confirmLockdownOpen, setConfirmLockdownOpen] = useState(false);
   const [confirmRestartOpen, setConfirmRestartOpen] = useState(false);
   const [confirmOpenDuringLockdown, setConfirmOpenDuringLockdown] =
     useState(false);
+
+  const fallbackKioskUrl =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1')
+      ? `http://${window.location.hostname}:8000/kiosk`
+      : typeof window !== 'undefined' && !window.location.hostname.endsWith('github.io')
+        ? `https://${window.location.hostname}:8443/kiosk`
+        : '';
+  const effectiveKioskUrl = dynamicKioskUrl || fallbackKioskUrl;
 
   const canControl = isClientConnected && connectionState === 'online';
 
@@ -371,25 +385,29 @@ export const LockStatusHero: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] text-outline">
-                    {isBiometricMode
-                      ? 'Trạm ĐT (/kiosk) đang bật tự động'
-                      : 'Đang tạm tắt xác thực từ ĐT'}
+                  <span className="flex items-center gap-1 text-[10px] text-outline">
+                    <span
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${
+                        isBioServerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>{isBioServerOnline ? 'Server AI Online' : 'Server AI Offline'}</span>
                   </span>
-                  <a
-                    href={
-                      window.location.hostname === 'localhost' ||
-                      window.location.hostname === '127.0.0.1'
-                        ? `http://${window.location.hostname}:8000/kiosk`
-                        : `https://${window.location.hostname}:8443/kiosk`
-                    }
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-0.5 text-[10px] font-bold text-primary hover:underline"
-                  >
-                    <span>Mở /kiosk</span>
-                    <ExternalLink className="h-2.5 w-2.5" />
-                  </a>
+                  {effectiveKioskUrl ? (
+                    <a
+                      href={effectiveKioskUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-0.5 text-[10px] font-bold text-primary hover:underline ml-1"
+                    >
+                      <span>Mở /kiosk</span>
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-outline italic ml-1">
+                      (Chờ kết nối Server)
+                    </span>
+                  )}
                 </div>
               </div>
               <Switch

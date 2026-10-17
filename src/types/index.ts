@@ -76,3 +76,12 @@ export interface MutationResult {
   userId?: string;
 }
 
+export interface BiometricSystemStatus {
+  online: boolean;
+  kioskUrl: string;
+  lanKioskUrl?: string;
+  lanHttpKioskUrl?: string;
+  lanIp?: string;
+  updatedAt?: number;
+}
+

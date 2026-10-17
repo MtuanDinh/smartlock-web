@@ -1,0 +1,13 @@
+services:
+  biometric-server:
+    build: .
+    container_name: smartlock-biometric-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    environment:
+      - VITE_FIREBASE_DATABASE_URL=https://lock-iot-2a021-default-rtdb.asia-southeast1.firebasedatabase.app
+      - PUBLIC_KIOSK_URL=${PUBLIC_KIOSK_URL:-}
+    volumes:
+      - ./models:/app/models:ro

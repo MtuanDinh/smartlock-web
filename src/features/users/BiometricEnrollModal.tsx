@@ -8,10 +8,14 @@ import {
   Trash2,
   Radio,
   ExternalLink,
+  QrCode,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Dialog } from '../../components/ui/Dialog';
 import { Button } from '../../components/ui/Button';
 import { useSystemStatus } from '../../hooks/useSystemStatus';
+import { useBiometricSystem } from '../../hooks/useBiometricSystem';
 import type {
   BiometricEnrollCommand,
   BiometricEnrollTarget,
@@ -44,7 +48,12 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
   onClearBiometrics,
 }) => {
   const { mockControls } = useSystemStatus();
+  const { kioskUrl: dynamicKioskUrl, online: isBioServerOnline } =
+    useBiometricSystem();
+
   const [secondsLeft, setSecondsLeft] = useState(120);
+  const [showQr, setShowQr] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const isEnrollingThisUser =
     enrollState.active && Boolean(user && enrollState.userId === user.id);
@@ -69,12 +78,26 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
 
   if (!user) return null;
 
-  const isLocal =
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1';
-  const kioskUrl = isLocal
-    ? `http://${window.location.hostname}:8000/kiosk`
-    : `https://${window.location.hostname}:8443/kiosk`;
+  const fallbackUrl =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1')
+      ? `http://${window.location.hostname}:8000/kiosk`
+      : typeof window !== 'undefined' && !window.location.hostname.endsWith('github.io')
+        ? `https://${window.location.hostname}:8443/kiosk`
+        : '';
+  const kioskUrl = dynamicKioskUrl || fallbackUrl;
+
+  const handleCopyLink = async () => {
+    if (!kioskUrl) return;
+    try {
+      await navigator.clipboard.writeText(kioskUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+    }
+  };
 
   return (
     <Dialog
@@ -83,6 +106,7 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
         if (!nextOpen && isEnrollingThisUser) {
           void onCancelEnroll();
         }
+        setShowQr(false);
         onOpenChange(nextOpen);
       }}
       maxWidthClass="max-w-lg"
@@ -94,22 +118,84 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
       }
       footer={
         isEnrollingThisUser ? (
-          <div className="flex w-full justify-center">
+          <div className="flex w-full items-center justify-between gap-2">
+            {kioskUrl && (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setShowQr((prev) => !prev)}
+                  leftIcon={<QrCode className="h-3.5 w-3.5" />}
+                  className="text-xs"
+                >
+                  {showQr ? 'Ẩn QR' : 'Mã QR'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void handleCopyLink()}
+                  leftIcon={
+                    copied ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )
+                  }
+                  className="text-xs"
+                >
+                  {copied ? 'Đã sao chép' : 'Chép link'}
+                </Button>
+              </div>
+            )}
             <Button variant="danger-outline" onClick={() => void onCancelEnroll()}>
-              Hủy Thu Mẫu Trên Điện Thoại
+              Hủy Thu Mẫu
             </Button>
           </div>
         ) : (
           <div className="flex w-full items-center justify-between gap-2">
-            <a
-              href={kioskUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-            >
-              <span>Mở trang /kiosk (Điện thoại)</span>
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+            <div className="flex items-center gap-1.5">
+              {kioskUrl ? (
+                <>
+                  <a
+                    href={kioskUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                  >
+                    <span>Mở /kiosk</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setShowQr((prev) => !prev)}
+                    leftIcon={<QrCode className="h-3.5 w-3.5" />}
+                    className="text-xs h-7 px-2"
+                  >
+                    {showQr ? 'Ẩn QR' : 'QR ĐT'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleCopyLink()}
+                    leftIcon={
+                      copied ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-500" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )
+                    }
+                    className="text-xs h-7 px-2"
+                  >
+                    {copied ? 'Đã chép' : 'Chép link'}
+                  </Button>
+                </>
+              ) : (
+                <span className="text-xs text-outline italic">
+                  Đang chờ Server AI...
+                </span>
+              )}
+            </div>
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Đóng
             </Button>
@@ -117,6 +203,28 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
         )
       }
     >
+      {/* Khung Mã QR kết nối Kiosk (khi bấm bật QR) */}
+      {showQr && kioskUrl && (
+        <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4 flex flex-col items-center text-center">
+          <div className="bg-white p-2.5 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
+                kioskUrl
+              )}`}
+              alt="QR Code Kiosk"
+              className="h-36 w-36 object-contain"
+              loading="lazy"
+            />
+          </div>
+          <p className="mt-2 text-xs font-bold text-on-surface">
+            Quét bằng Camera điện thoại để mở Trạm Kiosk
+          </p>
+          <p className="mt-0.5 text-[10px] text-outline break-all max-w-xs font-mono">
+            {kioskUrl}
+          </p>
+        </div>
+      )}
+
       {isEnrollingThisUser ? (
         /* GIAO DIỆN ĐỢI ĐIỆN THOẠI THU GIỌNG NÓI (AUTO TRANSCRIPT) / CHỤP CAM SAU HD */
         <div className="flex flex-col items-center text-center py-3 space-y-4">
@@ -209,6 +317,49 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
       ) : (
         /* GIAO DIỆN QUẢN LÝ & KÍCH HOẠT THU MẪU QUA ĐIỆN THOẠI */
         <div className="space-y-4">
+          {/* Thanh chỉ báo kết nối Trạm Điện Thoại (Kiosk) */}
+          <div className="rounded-xl border border-outline-variant/35 bg-surface-container-low/50 p-3 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    isBioServerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                  }`}
+                />
+                <span className="text-xs font-bold text-on-surface truncate">
+                  {isBioServerOnline ? 'Server AI Đang Sẵn Sàng' : 'Chờ Kết Nối Server AI'}
+                </span>
+              </div>
+              <p className="text-[10px] text-outline truncate mt-0.5 font-mono">
+                {kioskUrl || 'Chưa nhận diện được URL Kiosk'}
+              </p>
+            </div>
+            {kioskUrl && (
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowQr((prev) => !prev)}
+                  className="px-2 py-1 rounded-lg text-xs font-semibold bg-surface-container-high hover:bg-surface-container hover:text-primary transition-colors flex items-center gap-1 text-on-surface"
+                >
+                  <QrCode className="h-3 w-3" />
+                  <span>{showQr ? 'Ẩn' : 'QR'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyLink()}
+                  className="px-2 py-1 rounded-lg text-xs font-semibold bg-surface-container-high hover:bg-surface-container hover:text-primary transition-colors flex items-center gap-1 text-on-surface"
+                >
+                  {copied ? (
+                    <Check className="h-3 w-3 text-emerald-500" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                  <span>{copied ? 'Đã chép' : 'Chép'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Trạng thái hiện tại của Giọng nói & Khuôn mặt */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Thẻ trạng thái Giọng nói */}

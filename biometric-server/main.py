@@ -135,7 +135,18 @@ def _load_firebase_db_url() -> str:
     return "https://lock-iot-2a021-default-rtdb.asia-southeast1.firebasedatabase.app"
 
 
+def _parse_public_kiosk_url() -> str:
+    import sys
+    for idx, arg in enumerate(sys.argv):
+        if arg == "--public-url" and idx + 1 < len(sys.argv):
+            return sys.argv[idx + 1].strip()
+        if arg.startswith("--public-url="):
+            return arg.split("=", 1)[1].strip()
+    return os.environ.get("PUBLIC_KIOSK_URL", "").strip()
+
+
 FIREBASE_DB_URL = _load_firebase_db_url()
+PUBLIC_KIOSK_URL = _parse_public_kiosk_url()
 engine = BiometricEngine()
 
 app = FastAPI(
@@ -183,6 +194,25 @@ def fb_post(path: str, data: Any) -> Any:
     return resp.json()
 
 
+def _publish_biometric_heartbeat(online: bool = True) -> None:
+    lan_ip = _get_lan_ip()
+    effective_kiosk = PUBLIC_KIOSK_URL or f"https://{lan_ip}:8443/kiosk"
+    payload = {
+        "online": online,
+        "kioskUrl": effective_kiosk,
+        "lanKioskUrl": f"https://{lan_ip}:8443/kiosk",
+        "lanHttpKioskUrl": f"http://{lan_ip}:8000/kiosk",
+        "lanIp": lan_ip,
+        "updatedAt": int(time.time() * 1000),
+        "version": "2.2.0",
+        "pid": os.getpid(),
+    }
+    try:
+        fb_patch("SmartLock/System/Biometrics", payload)
+    except Exception as exc:
+        logger.debug("Biometric heartbeat publish skipped: %s", exc)
+
+
 @app.get("/kiosk")
 def serve_phone_kiosk() -> FileResponse:
     kiosk_path = BASE_DIR / "static" / "kiosk.html"
@@ -206,6 +236,7 @@ def get_biometric_status() -> Dict[str, Any]:
     biometric_mode = bool(control.get("Biometric_Mode", True))
     lockdown = bool(control.get("Lockdown", False))
     enroll_state = control.get("Biometric_Enroll") or {"active": False, "step": "idle"}
+    effective_kiosk = PUBLIC_KIOSK_URL or f"https://{lan_ip}:8443/kiosk"
 
     return {
         "ok": True,
@@ -214,10 +245,24 @@ def get_biometric_status() -> Dict[str, Any]:
         "lockdown": lockdown,
         "enrollState": enroll_state,
         "lanIp": lan_ip,
-        "kioskUrl": f"https://{lan_ip}:8443/kiosk",
+        "publicKioskUrl": PUBLIC_KIOSK_URL,
+        "kioskUrl": effective_kiosk,
+        "lanKioskUrl": f"https://{lan_ip}:8443/kiosk",
         "kioskHttpUrl": f"http://{lan_ip}:8000/kiosk",
         "models": engine.get_status(),
     }
+
+
+@app.post("/api/biometrics/set-public-url")
+def set_public_url(url: str = Form(...)) -> Dict[str, Any]:
+    global PUBLIC_KIOSK_URL
+    clean_url = url.strip()
+    if not clean_url.endswith("/kiosk"):
+        clean_url = f"{clean_url.rstrip('/')}/kiosk"
+    PUBLIC_KIOSK_URL = clean_url
+    logger.info("Updated PUBLIC_KIOSK_URL via API: %s", clean_url)
+    _publish_biometric_heartbeat(online=True)
+    return {"ok": True, "kioskUrl": clean_url}
 
 
 @app.get("/api/biometrics/kiosk-state")
@@ -858,6 +903,15 @@ def _free_port_if_in_use(port: int) -> None:
         logger.warning("Could not auto-free port %d: %s", port, exc)
 
 
+async def _biometric_heartbeat_loop() -> None:
+    while True:
+        try:
+            _publish_biometric_heartbeat(online=True)
+        except Exception as exc:
+            logger.debug("Biometric heartbeat exception: %s", exc)
+        await asyncio.sleep(15)
+
+
 async def _serve_dual_http_and_https() -> None:
     _free_port_if_in_use(8000)
     _free_port_if_in_use(8443)
@@ -865,8 +919,13 @@ async def _serve_dual_http_and_https() -> None:
     lan_ip = _get_lan_ip()
     has_ssl = ensure_self_signed_ssl_cert(lan_ip)
 
+    _publish_biometric_heartbeat(online=True)
+    heartbeat_task = asyncio.create_task(_biometric_heartbeat_loop())
+
     http_config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
     http_server = uvicorn.Server(http_config)
+
+    tasks = [heartbeat_task, asyncio.create_task(http_server.serve())]
 
     if has_ssl and CERT_FILE.exists() and KEY_FILE.exists():
         https_config = uvicorn.Config(
@@ -883,20 +942,18 @@ async def _serve_dual_http_and_https() -> None:
             lan_ip,
             lan_ip,
         )
-        tasks = [
-            asyncio.create_task(http_server.serve()),
-            asyncio.create_task(https_server.serve()),
-        ]
-        try:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        except (KeyboardInterrupt, asyncio.CancelledError, SystemExit):
-            for t in tasks:
-                t.cancel()
-    else:
-        try:
-            await http_server.serve()
-        except (KeyboardInterrupt, asyncio.CancelledError, SystemExit):
-            pass
+        if PUBLIC_KIOSK_URL:
+            logger.info(" Public Kiosk URL registered: %s", PUBLIC_KIOSK_URL)
+        tasks.append(asyncio.create_task(https_server.serve()))
+
+    try:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    except (KeyboardInterrupt, asyncio.CancelledError, SystemExit):
+        pass
+    finally:
+        for t in tasks:
+            t.cancel()
+        _publish_biometric_heartbeat(online=False)
 
 
 if __name__ == "__main__":
