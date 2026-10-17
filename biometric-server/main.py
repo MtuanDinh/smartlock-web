@@ -408,25 +408,40 @@ async def check_face_frame_alignment(
     image: UploadFile = File(...),
 ) -> JSONResponse:
     """
-    Kiểm tra trực tiếp theo thời gian thực (trong lúc đếm ngược 10s) xem khuôn mặt người dùng
-    đã đặt đúng vào KHUNG MÔ HÌNH KHUÔN MẶT trong camera hay chưa.
+    Kiểm tra trực tiếp theo thời gian thực (trong lúc đếm ngược 10s) toàn bộ 5 thuật toán
+    khuôn mặt đạt chuẩn (YuNet DNN + Căn tâm + Khoảng cách + Tư thế 5 điểm mốc + Độ sáng/nét).
     """
     image_bytes = await image.read()
     try:
         meta = engine.check_face_guide(image_bytes)
+        aligned = bool(meta.get("aligned", False))
         return JSONResponse(
             content={
-                "ok": True,
-                "aligned": True,
+                "ok": aligned,
+                "aligned": aligned,
                 "meta": meta,
-                "detail": "✅ Khuôn mặt đã khớp chuẩn trong khung mô hình! Vui lòng giữ yên...",
+                "checks": meta.get("checks", []),
+                "bbox": meta.get("bbox"),
+                "landmarks": meta.get("landmarks", []),
+                "detail": str(
+                    meta.get("detail")
+                    or (
+                        "✅ Đạt chuẩn 5/5 thuật toán sinh trắc học! Giữ yên khuôn mặt..."
+                        if aligned
+                        else "Hãy đặt khuôn mặt khớp vào khung mô hình bầu dục."
+                    )
+                ),
             }
         )
-    except ValueError as exc:
+    except Exception as exc:
+        logger.warning("check-face-frame error: %s", exc)
         return JSONResponse(
             content={
                 "ok": False,
                 "aligned": False,
+                "checks": [],
+                "bbox": None,
+                "landmarks": [],
                 "detail": str(exc),
             }
         )
@@ -439,8 +454,8 @@ async def enroll_face_from_phone(
 ) -> JSONResponse:
     """
     Lưu khuôn mặt từ Camera sau HD lên Server:
-    - Bắt buộc chờ đủ độ trễ 10 giây kể từ khi bước `waiting_face` bắt đầu để người dùng kịp căn chỉnh khuôn mặt vào khung mô hình.
-    - Bắt buộc khuôn mặt phải nằm đúng trong khung mô hình bầu dục trung tâm và đạt chuẩn độ sáng/độ nét.
+    - Chờ đủ thời gian chuẩn bị để người dùng kịp căn chỉnh khuôn mặt vào khung mô hình.
+    - Bắt buộc khuôn mặt phải đạt cả 5 thuật toán kiểm tra chuẩn (YuNet 5-Landmark + Căn tâm + Tỷ lệ + Trực diện + Độ nét).
     """
     enroll = fb_get("SmartLock/Control/Biometric_Enroll") or {}
     target_user_id = (userId or str(enroll.get("userId", ""))).strip()
@@ -453,49 +468,33 @@ async def enroll_face_from_phone(
 
     image_bytes = await image.read()
     now_ms = int(time.time() * 1000)
-    step_updated_ms = int(enroll.get("updatedAt", 0) or 0)
-    elapsed_ms = now_ms - step_updated_ms if step_updated_ms > 0 else 10000
-
-    # Đảm bảo độ trễ 10 giây trước khi cho phép lưu khuôn mặt lên Server
-    if elapsed_ms < 9500:
-        rem_sec = max(1, int(round((10000 - elapsed_ms) / 1000.0)))
-        try:
-            engine.check_face_guide(image_bytes)
-            msg = f"Khuôn mặt đã khớp khung mô hình! Tự động chụp & lưu sau {rem_sec}s..."
-            aligned = True
-        except ValueError as exc:
-            msg = f"Chuẩn bị chụp sau {rem_sec}s — {exc}"
-            aligned = False
-
-        return JSONResponse(
-            status_code=400,
-            content={
-                "ok": False,
-                "countingDown": True,
-                "secondsLeft": rem_sec,
-                "aligned": aligned,
-                "detail": msg,
-            },
-        )
 
     try:
-        face_emb, resolution = engine.extract_face_embedding(image_bytes)
+        face_emb, face_meta = engine.extract_face_embedding(image_bytes)
     except ValueError as exc:
+        fail_meta = getattr(exc, "face_meta", {}) or {}
         return JSONResponse(
             status_code=400,
             content={
                 "ok": False,
                 "countingDown": False,
                 "aligned": False,
+                "meta": fail_meta,
+                "checks": fail_meta.get("checks", []),
+                "bbox": fail_meta.get("bbox"),
+                "landmarks": fail_meta.get("landmarks", []),
                 "detail": str(exc),
             },
         )
+
+    w_res = int(face_meta.get("width", 1280))
+    h_res = int(face_meta.get("height", 720))
 
     fb_patch(
         f"SmartLock/Biometrics/{target_user_id}",
         {
             "faceEmbedding": face_emb,
-            "faceResolution": f"{resolution['width']}x{resolution['height']}",
+            "faceResolution": f"{w_res}x{h_res}",
             "updatedAt": now_ms,
         },
     )
@@ -513,15 +512,15 @@ async def enroll_face_from_phone(
             {
                 "active": False,
                 "step": "completed",
-                "message": f"Đã lưu khuôn mặt chuẩn HD ({resolution['width']}x{resolution['height']}) cho {target_user_name} thành công!",
+                "message": f"Đã lưu khuôn mặt chuẩn HD ({w_res}x{h_res}) cho {target_user_name} thành công!",
                 "updatedAt": now_ms,
             },
         )
 
     logger.info(
         "Enrolled face HD (%dx%d) for user=%s (%s)",
-        resolution["width"],
-        resolution["height"],
+        w_res,
+        h_res,
         target_user_id,
         target_user_name,
     )
@@ -532,7 +531,10 @@ async def enroll_face_from_phone(
             "userId": target_user_id,
             "aligned": True,
             "embeddingDim": len(face_emb),
-            "resolution": resolution,
+            "resolution": {"width": w_res, "height": h_res},
+            "checks": face_meta.get("checks", []),
+            "bbox": face_meta.get("bbox"),
+            "landmarks": face_meta.get("landmarks", []),
             "nextStep": "completed",
         }
     )
@@ -730,12 +732,17 @@ async def verify_face_step2(
 
     image_bytes = await image.read()
     try:
-        probe_face, resolution = engine.extract_face_embedding(image_bytes)
+        probe_face, face_meta = engine.extract_face_embedding(image_bytes)
     except ValueError as exc:
+        fail_meta = getattr(exc, "face_meta", {}) or {}
         return JSONResponse(
             content={
                 "unlocked": False,
                 "expired": False,
+                "aligned": False,
+                "checks": fail_meta.get("checks", []),
+                "bbox": fail_meta.get("bbox"),
+                "landmarks": fail_meta.get("landmarks", []),
                 "reason": str(exc),
             }
         )
@@ -747,6 +754,10 @@ async def verify_face_step2(
             content={
                 "unlocked": False,
                 "expired": False,
+                "aligned": True,
+                "checks": face_meta.get("checks", []),
+                "bbox": face_meta.get("bbox"),
+                "landmarks": face_meta.get("landmarks", []),
                 "reason": "Không tìm thấy mẫu khuôn mặt đã lưu của thành viên.",
             }
         )
@@ -757,6 +768,10 @@ async def verify_face_step2(
             content={
                 "unlocked": False,
                 "expired": False,
+                "aligned": True,
+                "checks": face_meta.get("checks", []),
+                "bbox": face_meta.get("bbox"),
+                "landmarks": face_meta.get("landmarks", []),
                 "faceScore": round(max(0.0, face_score), 3),
                 "reason": f"Khuôn mặt chưa khớp với {user_name} ({max(0.0, face_score)*100:.0f}%). Đang tiếp tục quét...",
             }
@@ -779,12 +794,19 @@ async def verify_face_step2(
     return JSONResponse(
         content={
             "unlocked": True,
+            "aligned": True,
             "userId": user_id,
             "userName": user_name,
             "voiceScore": session["voiceScore"],
             "phraseScore": session["phraseScore"],
             "faceScore": round(face_score, 3),
-            "resolution": resolution,
+            "checks": face_meta.get("checks", []),
+            "bbox": face_meta.get("bbox"),
+            "landmarks": face_meta.get("landmarks", []),
+            "resolution": {
+                "width": int(face_meta.get("width", 1280)),
+                "height": int(face_meta.get("height", 720)),
+            },
         }
     )
 

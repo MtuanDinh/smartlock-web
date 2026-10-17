@@ -104,6 +104,7 @@ class BiometricEngine:
         self.speaker_model = None
         self.mtcnn = None
         self.facenet = None
+        self.yunet_detector = None
         self.speechbrain_ready = False
         self.facenet_ready = False
         self.asr_ready = False
@@ -120,6 +121,26 @@ class BiometricEngine:
         return mat.astype(np.float32)
 
     def _init_models(self) -> None:
+        # 0. Khởi tạo OpenCV 5.0 YuNet DNN Face & 5-Landmark Detector
+        try:
+            import urllib.request
+            import cv2  # type: ignore
+
+            models_dir = os.path.join(os.path.dirname(__file__), "models")
+            os.makedirs(models_dir, exist_ok=True)
+            yunet_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
+            if not os.path.exists(yunet_path):
+                url = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+                urllib.request.urlretrieve(url, yunet_path)
+            if hasattr(cv2, "FaceDetectorYN"):
+                self.yunet_detector = cv2.FaceDetectorYN.create(
+                    yunet_path, "", (320, 320), 0.42, 0.3, 5000
+                )
+                logger.info("OpenCV 5.0 YuNet DNN Face & 5-Landmark Detector initialized.")
+        except Exception as exc:
+            self.yunet_detector = None
+            logger.warning("YuNet detector init warning: %s", exc)
+
         # 1. Khởi tạo SpeechRecognition (Vietnamese ASR)
         try:
             import speech_recognition as sr  # type: ignore
@@ -188,7 +209,7 @@ class BiometricEngine:
             else "speechbrain-compatible-mfcc-cmvn (192-D)",
             "facenet": "facenet-pytorch/vggface2 (512-D)"
             if self.facenet_ready
-            else "facenet-compatible-spatial (512-D)",
+            else "yunet-5landmarks + facenet-spatial (512-D)",
             "asr": "vi-VN Google ASR Transcript" if self.asr_ready else "unavailable",
             "voiceDimension": 192,
             "faceDimension": 512,
@@ -399,142 +420,405 @@ class BiometricEngine:
         return l2_normalize(emb_192)
 
     # =========================================================================
-    # XỬ LÝ ẢNH CAMERA SAU ĐỘ PHÂN GIẢI CAO & KIỂM TRA KHỚP KHUNG MÔ HÌNH KHUÔN MẶT
+    # XỬ LÝ ẢNH CAMERA SAU ĐỘ PHÂN GIẢI CAO & 5 THUẬT TOÁN KIỂM TRA KHUÔN MẶT CHUẨN
     # =========================================================================
-    def _validate_and_crop_face_in_guide(
+    def evaluate_face_frame(
         self, img: Image.Image
-    ) -> Tuple[Image.Image, Dict[str, object]]:
+    ) -> Tuple[Image.Image | None, Dict[str, object]]:
         """
-        Kiểm tra khuôn mặt người dùng có đặt đúng vào KHUNG MÔ HÌNH KHUÔN MẶT trung tâm trên camera hay không:
-        1. Phải phát hiện được khuôn mặt trực diện bằng OpenCV Cascade / MTCNN.
-        2. Tâm khuôn mặt (cx, cy) phải nằm trong vùng khung mô hình bầu dục trung tâm (0.28..0.72, 0.22..0.78).
-        3. Kích thước khuôn mặt phải vừa vặn với mô hình (chiếm 22% -> 85% khung hình, không quá xa/quá sát).
-        4. Đảm bảo độ sáng (42..238) và độ sắc nét chống rung mờ (Laplacian variance >= 18).
+        Thực thi đồng thời 5 Thuật toán Kiểm tra Khuôn mặt Đạt chuẩn (trả về chi tiết từng thuật toán
+        để hiển thị trực tiếp theo thời gian thực trên màn hình Camera điện thoại):
+        1. YuNet DNN Face & 5-Landmark Detection (Phát hiện khuôn mặt & 5 điểm mốc mắt-mũi-miệng).
+        2. Oval Model Center Alignment (Kiểm tra tâm khuôn mặt nằm trong khung mô hình bầu dục).
+        3. Biometric Scale & Distance Ratio (Kiểm tra tỷ lệ khuôn mặt / khoảng cách 25-40cm).
+        4. 5-Landmark 3D Frontal Pose (Kiểm tra góc nghiêng mắt & đối xứng sống mũi trực diện).
+        5. Luma Brightness & Laplacian Sharpness (Kiểm tra ánh sáng & độ sắc nét chống rung mờ).
         """
         width, height = img.size
-        if width < 160 or height < 160:
-            raise ValueError(
-                "Ảnh chụp quá nhỏ. Vui lòng giữ điện thoại ổn định để chụp rõ khuôn mặt."
-            )
+        if width < 120 or height < 120:
+            checks = [
+                {
+                    "id": "face_detect",
+                    "name": "1. Phát hiện mặt (YuNet DNN)",
+                    "passed": False,
+                    "value": "Ảnh quá nhỏ",
+                },
+                {
+                    "id": "center_align",
+                    "name": "2. Căn tâm khung mô hình",
+                    "passed": False,
+                    "value": "Chờ khung hình...",
+                },
+                {
+                    "id": "size_ratio",
+                    "name": "3. Khoảng cách & Kích thước",
+                    "passed": False,
+                    "value": "Chờ khung hình...",
+                },
+                {
+                    "id": "frontal_pose",
+                    "name": "4. Tư thế nhìn thẳng (5 điểm mốc)",
+                    "passed": False,
+                    "value": "Chờ khung hình...",
+                },
+                {
+                    "id": "image_quality",
+                    "name": "5. Độ sáng & Độ nét (Laplacian)",
+                    "passed": False,
+                    "value": "Chờ khung hình...",
+                },
+            ]
+            return None, {
+                "width": width,
+                "height": height,
+                "aligned": False,
+                "detail": "Ảnh chụp quá nhỏ. Vui lòng giữ điện thoại ổn định.",
+                "checks": checks,
+                "bbox": None,
+                "landmarks": [],
+            }
 
         rgb_np = np.asarray(img, dtype=np.uint8)
         import cv2  # type: ignore
 
         gray_full = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2GRAY)
-        gray_eq = cv2.equalizeHist(gray_full)
-        cascade_path = os.path.join(
-            cv2.data.haarcascades, "haarcascade_frontalface_default.xml"
-        )
-        detector = cv2.CascadeClassifier(cascade_path)
-        min_dim = max(56, int(min(width, height) * 0.15))
-        faces = detector.detectMultiScale(
-            gray_eq,
-            scaleFactor=1.11,
-            minNeighbors=5,
-            minSize=(min_dim, min_dim),
-        )
-        if len(faces) == 0:
-            alt_path = os.path.join(
-                cv2.data.haarcascades, "haarcascade_frontalface_alt2.xml"
-            )
-            alt_detector = cv2.CascadeClassifier(alt_path)
-            faces = alt_detector.detectMultiScale(
-                gray_eq,
-                scaleFactor=1.11,
-                minNeighbors=4,
-                minSize=(min_dim, min_dim),
-            )
+        bgr_full = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2BGR)
 
-        if len(faces) == 0:
-            raise ValueError(
-                "Chưa đặt khuôn mặt vào khung mô hình. Vui lòng đặt khuôn mặt thẳng vào khung bầu dục trên màn hình."
-            )
+        detected_row = None
+        scale_x = 1.0
+        scale_y = 1.0
 
-        # Chọn khuôn mặt lớn nhất
-        x, y, w_box, h_box = [
-            int(v) for v in max(faces, key=lambda b: int(b[2]) * int(b[3]))
+        # Ưu tiên 1: OpenCV 5.0 YuNet DNN FaceDetectorYN (kèm 5 điểm mốc giải phẫu)
+        if self.yunet_detector is not None:
+            try:
+                max_dim = 480
+                scale = min(1.0, float(max_dim) / float(max(width, height)))
+                work_w = max(64, int(round(width * scale)))
+                work_h = max(64, int(round(height * scale)))
+                scale_x = float(width) / float(work_w)
+                scale_y = float(height) / float(work_h)
+
+                work_bgr = (
+                    cv2.resize(bgr_full, (work_w, work_h))
+                    if scale < 1.0
+                    else bgr_full
+                )
+                self.yunet_detector.setInputSize((work_w, work_h))
+                _, faces = self.yunet_detector.detect(work_bgr)
+                if faces is not None and len(faces) > 0:
+                    best = max(
+                        faces,
+                        key=lambda r: float(r[2]) * float(r[3]) * float(r[14]),
+                    )
+                    detected_row = [float(v) for v in best]
+                else:
+                    # Thử xoay 90 độ theo chiều kim đồng hồ (nếu điện thoại gửi buffer landscape khi cầm dọc)
+                    rot90 = cv2.rotate(work_bgr, cv2.ROTATE_90_CLOCKWISE)
+                    self.yunet_detector.setInputSize((work_h, work_w))
+                    _, faces90 = self.yunet_detector.detect(rot90)
+                    if faces90 is not None and len(faces90) > 0:
+                        bgr_full = cv2.rotate(bgr_full, cv2.ROTATE_90_CLOCKWISE)
+                        gray_full = cv2.rotate(gray_full, cv2.ROTATE_90_CLOCKWISE)
+                        img = img.rotate(-90, expand=True)
+                        width, height = img.size
+                        scale_x = float(width) / float(work_h)
+                        scale_y = float(height) / float(work_w)
+                        best = max(faces90, key=lambda r: float(r[2]) * float(r[3]) * float(r[14]))
+                        detected_row = [float(v) for v in best]
+                    else:
+                        # Thử xoay 270 độ (90 độ ngược chiều kim đồng hồ)
+                        rot270 = cv2.rotate(work_bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                        self.yunet_detector.setInputSize((work_h, work_w))
+                        _, faces270 = self.yunet_detector.detect(rot270)
+                        if faces270 is not None and len(faces270) > 0:
+                            bgr_full = cv2.rotate(bgr_full, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                            gray_full = cv2.rotate(gray_full, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                            img = img.rotate(90, expand=True)
+                            width, height = img.size
+                            scale_x = float(width) / float(work_h)
+                            scale_y = float(height) / float(work_w)
+                            best = max(faces270, key=lambda r: float(r[2]) * float(r[3]) * float(r[14]))
+                            detected_row = [float(v) for v in best]
+            except Exception as exc:
+                logger.warning("YuNet detect error: %s", exc)
+
+        # Dự phòng nếu chưa có mặt từ YuNet
+        if detected_row is None:
+            mean_global = float(np.mean(gray_full))
+            checks = [
+                {
+                    "id": "face_detect",
+                    "name": "1. Phát hiện mặt (YuNet DNN)",
+                    "passed": False,
+                    "value": "Chưa thấy mặt trong khung",
+                },
+                {
+                    "id": "center_align",
+                    "name": "2. Căn tâm khung mô hình",
+                    "passed": False,
+                    "value": "Đặt mặt vào giữa khung",
+                },
+                {
+                    "id": "size_ratio",
+                    "name": "3. Khoảng cách & Kích thước",
+                    "passed": False,
+                    "value": "Cách cam 25–35 cm",
+                },
+                {
+                    "id": "frontal_pose",
+                    "name": "4. Tư thế nhìn thẳng (5 điểm mốc)",
+                    "passed": False,
+                    "value": "Nhìn thẳng vào cam sau",
+                },
+                {
+                    "id": "image_quality",
+                    "name": "5. Độ sáng & Độ nét (Laplacian)",
+                    "passed": mean_global >= 32.0,
+                    "value": f"Ánh sáng nền: {int(mean_global)}",
+                },
+            ]
+            return None, {
+                "width": width,
+                "height": height,
+                "aligned": False,
+                "detail": "Chưa phát hiện khuôn mặt. Hãy đặt khuôn mặt vào trong KHUNG MÔ HÌNH BẦU DỤC trên màn hình.",
+                "checks": checks,
+                "bbox": None,
+                "landmarks": [],
+            }
+
+        # Giải mã tọa độ Bounding Box và 5 điểm mốc từ YuNet
+        x = int(round(detected_row[0] * scale_x))
+        y = int(round(detected_row[1] * scale_y))
+        w_box = int(round(detected_row[2] * scale_x))
+        h_box = int(round(detected_row[3] * scale_y))
+        conf = float(detected_row[14])
+
+        # 5 điểm mốc chuẩn hóa (0.0 -> 1.0): [Mắt phải, Mắt trái, Chóp mũi, Miệng phải, Miệng trái]
+        landmarks_norm = [
+            [
+                round((detected_row[4] * scale_x) / float(width), 4),
+                round((detected_row[5] * scale_y) / float(height), 4),
+            ],
+            [
+                round((detected_row[6] * scale_x) / float(width), 4),
+                round((detected_row[7] * scale_y) / float(height), 4),
+            ],
+            [
+                round((detected_row[8] * scale_x) / float(width), 4),
+                round((detected_row[9] * scale_y) / float(height), 4),
+            ],
+            [
+                round((detected_row[10] * scale_x) / float(width), 4),
+                round((detected_row[11] * scale_y) / float(height), 4),
+            ],
+            [
+                round((detected_row[12] * scale_x) / float(width), 4),
+                round((detected_row[13] * scale_y) / float(height), 4),
+            ],
         ]
+        bbox_norm = [
+            round(max(0.0, x / float(width)), 4),
+            round(max(0.0, y / float(height)), 4),
+            round(min(1.0, w_box / float(width)), 4),
+            round(min(1.0, h_box / float(height)), 4),
+        ]
+
         cx = (x + w_box * 0.5) / float(width)
         cy = (y + h_box * 0.5) / float(height)
         size_ratio = max(w_box, h_box) / float(min(width, height))
 
-        # 1. Kiểm tra căn tâm trong khung mô hình khuôn mặt
-        if cx < 0.28:
-            raise ValueError(
-                "Khuôn mặt đang lệch sang TRÁI khung mô hình. Hãy di chuyển khuôn mặt vào chính giữa khung."
-            )
-        if cx > 0.72:
-            raise ValueError(
-                "Khuôn mặt đang lệch sang PHẢI khung mô hình. Hãy di chuyển khuôn mặt vào chính giữa khung."
-            )
-        if cy < 0.22:
-            raise ValueError(
-                "Khuôn mặt đang ở QUÁ CAO so với khung mô hình. Hãy hạ nhẹ góc máy hoặc khuôn mặt vào tâm khung."
-            )
-        if cy > 0.78:
-            raise ValueError(
-                "Khuôn mặt đang ở QUÁ THẤP so với khung mô hình. Hãy nâng khuôn mặt vào đúng tâm khung bầu dục."
-            )
+        # --- THUẬT TOÁN 1: Độ tin cậy phát hiện khuôn mặt YuNet ---
+        pass_detect = conf >= 0.40
+        val_detect = f"Đạt ({int(round(conf * 100))}% AI)"
 
-        # 2. Kiểm tra tỷ lệ kích thước khuôn mặt so với mô hình
-        if size_ratio < 0.22:
-            raise ValueError(
-                "Khuôn mặt quá nhỏ so với khung mô hình. Hãy đưa điện thoại lại gần khuôn mặt hơn (cách 25–35 cm)."
-            )
-        if size_ratio > 0.85:
-            raise ValueError(
-                "Khuôn mặt quá sát camera. Hãy đưa điện thoại ra xa một chút để khuôn mặt nằm gọn trong khung mô hình."
-            )
+        # --- THUẬT TOÁN 2: Kiểm tra căn tâm trong Khung Mô Hình Bầu Dục ---
+        pass_center = True
+        center_reason = ""
+        if cx < 0.22:
+            pass_center = False
+            center_reason = "Khuôn mặt đang lệch sang TRÁI khung mô hình."
+            val_center = f"Lệch TRÁI (X:{int(cx * 100)}%)"
+        elif cx > 0.78:
+            pass_center = False
+            center_reason = "Khuôn mặt đang lệch sang PHẢI khung mô hình."
+            val_center = f"Lệch PHẢI (X:{int(cx * 100)}%)"
+        elif cy < 0.16:
+            pass_center = False
+            center_reason = "Khuôn mặt đang ở QUÁ CAO so với khung mô hình."
+            val_center = f"Quá CAO (Y:{int(cy * 100)}%)"
+        elif cy > 0.84:
+            pass_center = False
+            center_reason = "Khuôn mặt đang ở QUÁ THẤP so với khung mô hình."
+            val_center = f"Quá THẤP (Y:{int(cy * 100)}%)"
+        else:
+            val_center = f"Đạt chuẩn (Tâm {int(cx * 100)}%, {int(cy * 100)}%)"
 
-        # 3. Kiểm tra độ sáng & độ nét (chống rung nhòe)
-        gray_face = gray_full[max(0, y) : min(height, y + h_box), max(0, x) : min(width, x + w_box)]
-        mean_luma = float(np.mean(gray_face))
-        if mean_luma < 42.0:
-            raise ValueError(
-                "Khuôn mặt bị thiếu sáng. Vui lòng đứng nơi đủ sáng và đặt mặt vào khung mô hình."
-            )
-        if mean_luma > 238.0:
-            raise ValueError(
-                "Khuôn mặt bị lóa sáng mạnh. Vui lòng tránh ngược sáng để khuôn mặt rõ nét."
-            )
+        # --- THUẬT TOÁN 3: Kiểm tra khoảng cách & tỷ lệ kích thước khuôn mặt ---
+        pass_size = True
+        size_reason = ""
+        if size_ratio < 0.16:
+            pass_size = False
+            size_reason = "Khuôn mặt hơi nhỏ. Hãy đưa điện thoại lại gần hơn (cách 25–35 cm)."
+            val_size = f"Quá xa ({int(size_ratio * 100)}% < 16%)"
+        elif size_ratio > 0.88:
+            pass_size = False
+            size_reason = "Khuôn mặt quá sát camera. Hãy đưa điện thoại ra xa một chút."
+            val_size = f"Quá gần ({int(size_ratio * 100)}% > 88%)"
+        else:
+            val_size = f"Đạt chuẩn ({int(size_ratio * 100)}% khung)"
 
-        lap_var = float(
-            cv2.Laplacian(cv2.resize(gray_face, (128, 128)), cv2.CV_64F).var()
+        # --- THUẬT TOÁN 4: Kiểm tra tư thế nhìn thẳng bằng 5 Điểm mốc (Roll & Yaw) ---
+        re_x, re_y = landmarks_norm[0]
+        le_x, le_y = landmarks_norm[1]
+        nt_x, _ = landmarks_norm[2]
+        eye_dx = abs(le_x - re_x)
+        eye_dy = abs(le_y - re_y)
+        roll_deg = (
+            float(math.degrees(math.atan2(eye_dy, max(eye_dx, 1e-4))))
+            if eye_dx > 0.01
+            else 0.0
         )
-        if lap_var < 18.0:
-            raise ValueError(
-                "Khuôn mặt đang bị mờ do rung tay. Vui lòng giữ yên điện thoại trong khung mô hình."
+        eye_mid_x = 0.5 * (re_x + le_x)
+        yaw_asym = abs(nt_x - eye_mid_x) / max(eye_dx, 0.04)
+
+        pass_pose = True
+        pose_reason = ""
+        if roll_deg > 28.0:
+            pass_pose = False
+            pose_reason = f"Đầu đang nghiêng ({round(roll_deg, 1)}°). Hãy giữ đầu thẳng trong khung mô hình."
+            val_pose = f"Nghiêng {round(roll_deg, 1)}° (>28°)"
+        elif yaw_asym > 0.55:
+            pass_pose = False
+            pose_reason = "Khuôn mặt đang quay nghiêng. Hãy nhìn thẳng trực diện vào camera sau."
+            val_pose = "Đang quay nghiêng mặt"
+        else:
+            val_pose = f"Trực diện (Góc {round(roll_deg, 1)}°)"
+
+        # --- THUẬT TOÁN 5: Kiểm tra Độ sáng Luma & Độ sắc nét Laplacian ---
+        x0 = max(0, x)
+        y0 = max(0, y)
+        x1_crop = min(width, max(x0 + 16, x + w_box))
+        y1_crop = min(height, max(y0 + 16, y + h_box))
+        gray_face = gray_full[y0:y1_crop, x0:x1_crop]
+        mean_luma = float(np.mean(gray_face)) if gray_face.size > 0 else 100.0
+        lap_var = (
+            float(cv2.Laplacian(cv2.resize(gray_face, (128, 128)), cv2.CV_64F).var())
+            if gray_face.size > 0
+            else 50.0
+        )
+
+        pass_quality = True
+        quality_reason = ""
+        if mean_luma < 30.0:
+            pass_quality = False
+            quality_reason = "Khuôn mặt bị thiếu sáng. Vui lòng đứng nơi đủ ánh sáng."
+            val_quality = f"Thiếu sáng (Luma {int(mean_luma)})"
+        elif mean_luma > 246.0:
+            pass_quality = False
+            quality_reason = "Khuôn mặt bị chói sáng mạnh. Vui lòng tránh ngược sáng."
+            val_quality = f"Chói sáng (Luma {int(mean_luma)})"
+        elif lap_var < 10.0:
+            pass_quality = False
+            quality_reason = "Ảnh khuôn mặt bị mờ rung. Vui lòng giữ yên điện thoại."
+            val_quality = f"Mờ rung (Nét {round(lap_var, 1)})"
+        else:
+            val_quality = f"Đạt (Sáng {int(mean_luma)} | Nét {int(lap_var)})"
+
+        checks = [
+            {
+                "id": "face_detect",
+                "name": "1. Phát hiện mặt (YuNet DNN)",
+                "passed": pass_detect,
+                "value": val_detect,
+            },
+            {
+                "id": "center_align",
+                "name": "2. Căn tâm khung mô hình",
+                "passed": pass_center,
+                "value": val_center,
+            },
+            {
+                "id": "size_ratio",
+                "name": "3. Khoảng cách & Kích thước",
+                "passed": pass_size,
+                "value": val_size,
+            },
+            {
+                "id": "frontal_pose",
+                "name": "4. Tư thế nhìn thẳng (5 điểm mốc)",
+                "passed": pass_pose,
+                "value": val_pose,
+            },
+            {
+                "id": "image_quality",
+                "name": "5. Độ sáng & Độ nét (Laplacian)",
+                "passed": pass_quality,
+                "value": val_quality,
+            },
+        ]
+
+        aligned = bool(
+            pass_detect and pass_center and pass_size and pass_pose and pass_quality
+        )
+        if aligned:
+            detail_msg = "✅ Đạt chuẩn 5/5 thuật toán sinh trắc học! Giữ yên khuôn mặt..."
+        else:
+            detail_msg = (
+                center_reason
+                or size_reason
+                or pose_reason
+                or quality_reason
+                or "Hãy đặt khuôn mặt khớp vào khung mô hình bầu dục."
             )
 
         pad_x = int(w_box * 0.10)
         pad_y = int(h_box * 0.10)
-        x1 = max(0, x - pad_x)
-        y1 = max(0, y - pad_y)
-        x2 = min(width, x + w_box + pad_x)
-        y2 = min(height, y + h_box + pad_y)
-        face_crop_pil = img.crop((x1, y1, x2, y2)).resize(
+        cx1 = max(0, x - pad_x)
+        cy1 = max(0, y - pad_y)
+        cx2 = min(width, x + w_box + pad_x)
+        cy2 = min(height, y + h_box + pad_y)
+        face_crop_pil = img.crop((cx1, cy1, cx2, cy2)).resize(
             (64, 64), Image.Resampling.BICUBIC
         )
 
         meta: Dict[str, object] = {
             "width": width,
             "height": height,
-            "aligned": True,
+            "aligned": aligned,
+            "detail": detail_msg,
+            "confidence": round(conf, 3),
             "cx": round(cx, 3),
             "cy": round(cy, 3),
             "sizeRatio": round(size_ratio, 3),
+            "rollAngle": round(roll_deg, 1),
+            "brightness": round(mean_luma, 1),
             "sharpness": round(lap_var, 1),
+            "bbox": bbox_norm,
+            "landmarks": landmarks_norm,
+            "checks": checks,
         }
         return face_crop_pil, meta
 
+    def _validate_and_crop_face_in_guide(
+        self, img: Image.Image
+    ) -> Tuple[Image.Image, Dict[str, object]]:
+        """Kiểm tra khuôn mặt đạt đủ 5 thuật toán chuẩn trước khi trích xuất vector 512-D."""
+        face_crop_pil, meta = self.evaluate_face_frame(img)
+        if not meta.get("aligned") or face_crop_pil is None:
+            err = ValueError(str(meta.get("detail") or "Khuôn mặt chưa khớp khung mô hình."))
+            setattr(err, "face_meta", meta)
+            raise err
+        return face_crop_pil, meta
+
     def check_face_guide(self, image_bytes: bytes) -> Dict[str, object]:
-        """Kiểm tra nhanh khung hình hiện tại đã khớp mô hình khuôn mặt chuẩn hay chưa."""
+        """Trả về toàn bộ trạng thái 5 thuật toán kiểm tra khuôn mặt + 5 điểm mốc theo thời gian thực."""
         img = Image.open(io.BytesIO(image_bytes))
         img = ImageOps.exif_transpose(img).convert("RGB")
-        _, meta = self._validate_and_crop_face_in_guide(img)
+        _, meta = self.evaluate_face_frame(img)
         return meta
 
-    def extract_face_embedding(self, image_bytes: bytes) -> Tuple[List[float], Dict[str, int]]:
+    def extract_face_embedding(self, image_bytes: bytes) -> Tuple[List[float], Dict[str, object]]:
         """
         Nhận ảnh chụp từ Camera sau của điện thoại (độ phân giải cao),
         bắt buộc khuôn mặt phải nằm đúng trong khung mô hình chuẩn,
@@ -544,8 +828,8 @@ class BiometricEngine:
         img = ImageOps.exif_transpose(img).convert("RGB")
         width, height = img.size
 
-        # Bước 1: Kiểm tra khuôn mặt đã đặt đúng vào khung mô hình chuẩn hay chưa
-        face_crop_pil, _ = self._validate_and_crop_face_in_guide(img)
+        # Bước 1: Kiểm tra khuôn mặt đã đạt 5 thuật toán chuẩn hay chưa
+        face_crop_pil, meta = self._validate_and_crop_face_in_guide(img)
 
         # Bước 2: Trích xuất đặc trưng 512 chiều
         if self.facenet_ready and self.mtcnn is not None and self.facenet is not None:
@@ -560,7 +844,7 @@ class BiometricEngine:
                 face_tensor = face_tensor.unsqueeze(0)
             with torch.no_grad():
                 emb = self.facenet(face_tensor).squeeze().cpu().numpy()
-            return l2_normalize(emb), {"width": width, "height": height}
+            return l2_normalize(emb), meta
 
         arr = np.asarray(face_crop_pil, dtype=np.float32) / 255.0
         if float(np.std(arr)) < 0.05:
@@ -588,5 +872,5 @@ class BiometricEngine:
         )
         emb_512 = np.concatenate([small_16 / 32.0, gx_128, gy_128], axis=0)
         emb_512 = emb_512 - float(np.mean(emb_512))
-        return l2_normalize(emb_512), {"width": width, "height": height}
+        return l2_normalize(emb_512), meta
 

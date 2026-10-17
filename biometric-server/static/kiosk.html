@@ -171,8 +171,8 @@
         </p>
       </div>
 
-      <!-- Stage Visual: High-Resolution Rear Camera Face Scanner with Biometric Face Model Guide -->
-      <div id="camera-visual" class="hidden flex-col items-center justify-center space-y-2">
+      <!-- Stage Visual: High-Resolution Rear Camera Face Scanner with Biometric Face Model Guide & Live 5-Algorithm HUD -->
+      <div id="camera-visual" class="hidden flex-col items-center justify-center space-y-2.5 w-full">
         <div id="camera-frame-box" class="relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-sky-400/70 bg-black shadow-xl shadow-sky-500/20 transition-colors duration-300">
           <video
             id="kiosk-video"
@@ -201,7 +201,7 @@
               y="0"
               width="200"
               height="150"
-              fill="rgba(2, 6, 23, 0.56)"
+              fill="rgba(2, 6, 23, 0.52)"
               mask="url(#face-oval-cutout)"
             />
 
@@ -236,6 +236,18 @@
             </g>
           </svg>
 
+          <!-- Canvas hiển thị trực tiếp Bounding Box & 5 Điểm mốc giải phẫu (Mắt-Mũi-Miệng) từ YuNet AI -->
+          <canvas
+            id="face-landmark-canvas"
+            class="pointer-events-none absolute inset-0 w-full h-full"
+          ></canvas>
+
+          <!-- Hiệu ứng nháy Flash trắng khi Tự động Chụp thành công -->
+          <div
+            id="cam-shutter-flash"
+            class="pointer-events-none absolute inset-0 bg-white opacity-0 transition-opacity duration-200"
+          ></div>
+
           <div class="scan-laser"></div>
 
           <!-- Top Badge: Trạng thái khớp khung mô hình & Đếm ngược 10s -->
@@ -255,10 +267,60 @@
           </div>
 
           <div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-sm text-[10px] font-mono text-sky-300">
-            <span id="cam-res-label">CAM SAU HD • AUTO-FOCUS</span>
+            <span id="cam-res-label">CAM SAU HD • YUNET 5-LANDMARK AI</span>
             <span id="cam-countdown">30s</span>
           </div>
         </div>
+
+        <!-- BẢNG HUD TRỰC QUAN 5 THUẬT TOÁN KIỂM TRA KHUÔN MẶT ĐẠT CHUẨN (HIỂN THỊ TRỰC TIẾP KHI GHI HÌNH) -->
+        <div
+          id="face-algo-panel"
+          class="w-full rounded-2xl bg-slate-950/85 border border-slate-800 px-3 py-2.5 text-left space-y-1.5"
+        >
+          <div class="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+            <span class="text-[10px] font-extrabold uppercase tracking-wider text-sky-400">
+              🧬 5 THUẬT TOÁN KIỂM TRA KHUÔN MẶT CHUẨN
+            </span>
+            <span
+              id="face-algo-score-badge"
+              class="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded bg-slate-800 text-slate-300"
+            >
+              ĐANG QUÉT 0/5
+            </span>
+          </div>
+          <div id="face-algo-list" class="space-y-1 text-[11px] font-mono">
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 1. Phát hiện mặt (YuNet DNN)</span>
+              <span class="text-slate-500">Đang khởi tạo...</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 2. Căn tâm khung mô hình</span>
+              <span class="text-slate-500">Chờ khung hình...</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 3. Khoảng cách &amp; Kích thước</span>
+              <span class="text-slate-500">Chờ khung hình...</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 4. Tư thế nhìn thẳng (5 điểm mốc)</span>
+              <span class="text-slate-500">Chờ khung hình...</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 5. Độ sáng &amp; Độ nét (Laplacian)</span>
+              <span class="text-slate-500">Chờ khung hình...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nút chụp nhanh khi đã khớp chuẩn 5/5 thuật toán (không cần đợi hết 10s nếu người dùng đã căn chuẩn) -->
+        <button
+          id="btn-force-snap-face"
+          type="button"
+          class="hidden w-full py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 active:scale-95"
+        >
+          <span>📸 CHỤP NGAY (ĐÃ ĐẠT 5/5 CHUẨN)</span>
+        </button>
+
         <canvas id="capture-canvas" class="hidden"></canvas>
       </div>
 
@@ -321,6 +383,11 @@
     const faceGuideContour = document.getElementById('face-guide-contour');
     const faceAlignBadge = document.getElementById('face-align-badge');
     const facePrepTimer = document.getElementById('face-prep-timer');
+    const faceLandmarkCanvas = document.getElementById('face-landmark-canvas');
+    const camShutterFlash = document.getElementById('cam-shutter-flash');
+    const faceAlgoScoreBadge = document.getElementById('face-algo-score-badge');
+    const faceAlgoList = document.getElementById('face-algo-list');
+    const btnForceSnapFace = document.getElementById('btn-force-snap-face');
     const vadCore = document.getElementById('vad-core');
     const vadIcon = document.getElementById('vad-icon');
     const vadStateLabel = document.getElementById('vad-state-label');
@@ -570,6 +637,146 @@
       }
     });
 
+    function triggerShutterFlash() {
+      if (!camShutterFlash) return;
+      camShutterFlash.style.opacity = '0.9';
+      setTimeout(() => {
+        camShutterFlash.style.opacity = '0';
+      }, 220);
+    }
+
+    function clearLandmarkCanvas() {
+      if (!faceLandmarkCanvas) return;
+      const ctx = faceLandmarkCanvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, faceLandmarkCanvas.width, faceLandmarkCanvas.height);
+      }
+    }
+
+    function renderFaceAlgorithmHud(data) {
+      if (!data) return;
+      const checks = Array.isArray(data.checks)
+        ? data.checks
+        : (data.meta && Array.isArray(data.meta.checks) ? data.meta.checks : []);
+      const isAligned = Boolean(data.aligned || (data.meta && data.meta.aligned));
+
+      if (faceAlgoList && checks.length > 0) {
+        let passedCount = 0;
+        const rowsHtml = checks
+          .map((chk) => {
+            const ok = Boolean(chk.passed);
+            if (ok) passedCount += 1;
+            const icon = ok ? '✅' : '⚠️';
+            const nameCls = ok
+              ? 'text-emerald-300 font-bold'
+              : 'text-amber-300 font-semibold';
+            const valCls = ok
+              ? 'text-emerald-400 font-extrabold'
+              : 'text-amber-400 font-bold';
+            return `<div class="flex items-center justify-between gap-2 py-0.5">
+              <span class="${nameCls} truncate">${icon} ${chk.name}</span>
+              <span class="${valCls} shrink-0">${chk.value || ''}</span>
+            </div>`;
+          })
+          .join('');
+        faceAlgoList.innerHTML = rowsHtml;
+
+        if (faceAlgoScoreBadge) {
+          faceAlgoScoreBadge.textContent = `ĐẠT ${passedCount}/${checks.length} THUẬT TOÁN`;
+          faceAlgoScoreBadge.className =
+            passedCount === checks.length
+              ? 'text-[10px] font-mono font-extrabold px-2 py-0.5 rounded bg-emerald-500 text-slate-950 shadow'
+              : 'text-[10px] font-mono font-extrabold px-2 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-400/40';
+        }
+      }
+
+      // Vẽ trực tiếp Khung Bounding Box & 5 Điểm mốc giải phẫu (Mắt phải, Mắt trái, Mũi, 2 Khóe miệng) lên màn hình Camera
+      if (!faceLandmarkCanvas || !cameraFrameBox) return;
+      const rect = cameraFrameBox.getBoundingClientRect();
+      const cw = Math.max(1, Math.round(rect.width));
+      const ch = Math.max(1, Math.round(rect.height));
+      if (faceLandmarkCanvas.width !== cw || faceLandmarkCanvas.height !== ch) {
+        faceLandmarkCanvas.width = cw;
+        faceLandmarkCanvas.height = ch;
+      }
+      const ctx = faceLandmarkCanvas.getContext('2d');
+      ctx.clearRect(0, 0, cw, ch);
+
+      const bbox = (Array.isArray(data.bbox) && data.bbox.length === 4)
+        ? data.bbox
+        : (data.meta && Array.isArray(data.meta.bbox) && data.meta.bbox.length === 4 ? data.meta.bbox : null);
+      const landmarks = Array.isArray(data.landmarks)
+        ? data.landmarks
+        : (data.meta && Array.isArray(data.meta.landmarks) ? data.meta.landmarks : []);
+      const strokeColor = isAligned ? '#10b981' : '#f59e0b';
+
+      if (bbox) {
+        const bx = bbox[0] * cw;
+        const by = bbox[1] * ch;
+        const bw = bbox[2] * cw;
+        const bh = bbox[3] * ch;
+
+        ctx.save();
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2.2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(bx, by, bw, bh);
+
+        // Nhãn AI trên góc khung mặt
+        ctx.setLineDash([]);
+        ctx.fillStyle = isAligned
+          ? 'rgba(6, 78, 59, 0.88)'
+          : 'rgba(120, 53, 15, 0.88)';
+        const tagText = isAligned
+          ? '✓ YUNET AI: ĐẠT CHUẨN 5/5'
+          : '⚡ YUNET AI: ĐANG CĂN CHỈNH';
+        ctx.font = 'bold 10px JetBrains Mono, monospace';
+        const tw = ctx.measureText(tagText).width + 10;
+        const ty = Math.max(28, by - 6);
+        ctx.fillRect(bx, ty - 14, tw, 16);
+        ctx.fillStyle = isAligned ? '#6ee7b7' : '#fde68a';
+        ctx.fillText(tagText, bx + 5, ty - 3);
+        ctx.restore();
+      }
+
+      if (landmarks.length >= 5) {
+        const pts = landmarks.map((pt) => [pt[0] * cw, pt[1] * ch]);
+        const [re, le, nt, rm, lm] = pts;
+
+        ctx.save();
+        // Vẽ trục cân bằng 2 mắt - mũi - miệng
+        ctx.strokeStyle = isAligned
+          ? 'rgba(16, 185, 129, 0.85)'
+          : 'rgba(56, 189, 248, 0.85)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        // Trục ngang 2 mắt
+        ctx.moveTo(re[0], re[1]);
+        ctx.lineTo(le[0], le[1]);
+        // Trục dọc từ tâm 2 mắt xuống chóp mũi
+        const midEyeX = 0.5 * (re[0] + le[0]);
+        const midEyeY = 0.5 * (re[1] + le[1]);
+        ctx.moveTo(midEyeX, midEyeY);
+        ctx.lineTo(nt[0], nt[1]);
+        // Đường miệng
+        ctx.moveTo(rm[0], rm[1]);
+        ctx.lineTo(lm[0], lm[1]);
+        ctx.stroke();
+
+        // Vẽ 5 điểm mốc sinh trắc học (Mắt, Mũi, Miệng)
+        pts.forEach(([px, py], idx) => {
+          ctx.beginPath();
+          ctx.arc(px, py, idx === 2 ? 4.2 : 3.4, 0, Math.PI * 2);
+          ctx.fillStyle = isAligned ? '#34d399' : '#38bdf8';
+          ctx.fill();
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = '#020617';
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+    }
+
     function updateFaceGuideVisual(mode, customBadgeText) {
       if (!faceGuideBrackets || !faceGuideContour || !faceAlignBadge || !cameraFrameBox) return;
       if (mode === 'aligned') {
@@ -623,7 +830,7 @@
       } else {
         facePrepTimer.className =
           'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
-        facePrepTimer.textContent = '📸 ĐANG CHỤP CHUẨN';
+        facePrepTimer.textContent = '📸 TỰ ĐỘNG CHỤP';
         camCountdown.textContent = 'AUTO CAPTURE';
       }
     }
@@ -631,6 +838,8 @@
     async function setVisualPhase(phase) {
       resetVadBuffer();
       if (phase === 'voice') {
+        clearLandmarkCanvas();
+        if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
         voiceVisual.classList.remove('hidden');
         cameraVisual.classList.add('hidden');
         cameraVisual.classList.remove('flex');
@@ -655,6 +864,14 @@
             'Không thể mở Camera sau: ' + (err && err.message ? err.message : err);
         }
       }
+    }
+
+    if (btnForceSnapFace) {
+      btnForceSnapFace.addEventListener('click', async () => {
+        btnForceSnapFace.classList.add('hidden');
+        faceEnrollPrepStartAt = 0;
+        await processFaceStep();
+      });
     }
 
     /**
@@ -828,7 +1045,7 @@
     }
 
     async function processFaceStep() {
-      if (isBusyUploading || Date.now() - lastFaceScanAt < 900) return;
+      if (isBusyUploading || Date.now() - lastFaceScanAt < 420) return;
       if (Date.now() < cooldownUntil) return;
       const frameBlob = await captureHighResFrameBlob();
       if (!frameBlob) return;
@@ -848,7 +1065,7 @@
             Math.ceil((FACE_ENROLL_PREP_MS - elapsedPrep) / 1000)
           );
 
-          // Trong 10 giây đầu tiên: Chỉ kiểm tra khuôn mặt đã đặt đúng vào khung mô hình chưa (chưa gửi lưu lên Server)
+          // Trong 10 giây đầu tiên: Chạy 5 thuật toán kiểm tra khuôn mặt theo thời gian thực & hiển thị trực tiếp trên màn hình
           if (remPrepSec > 0) {
             const checkForm = new FormData();
             checkForm.append('image', frameBlob, 'check_guide.jpg');
@@ -860,20 +1077,24 @@
               }
             );
             const checkData = await checkResp.json();
+            renderFaceAlgorithmHud(checkData);
+
             if (checkData.aligned) {
               updateFaceGuideVisual(
                 'aligned',
-                '✅ ĐÃ KHỚP MÔ HÌNH — GIỮ YÊN!'
+                '✅ ĐẠT 5/5 THUẬT TOÁN — GIỮ YÊN!'
               );
-              statusTitle.textContent = `Chuẩn bị lưu sau ${remPrepSec}s (Đã khớp khung!)`;
+              if (btnForceSnapFace) btnForceSnapFace.classList.remove('hidden');
+              statusTitle.textContent = `Tự động chụp sau ${remPrepSec}s (Đã đạt 5/5 chuẩn!)`;
               statusDesc.textContent =
-                'Khuôn mặt đã nằm chuẩn trong mô hình. Vui lòng giữ nguyên vị trí cho đến khi hết đếm ngược...';
+                'Khuôn mặt đã khớp hoàn toàn khung mô hình & đạt đủ 5 thuật toán. Giữ yên hoặc bấm "CHỤP NGAY"...';
             } else {
               updateFaceGuideVisual(
                 'warning',
-                '⚠️ ĐẶT MẶT VÀO GIỮA KHUNG MÔ HÌNH'
+                '⚠️ ĐANG KIỂM TRA 5 THUẬT TOÁN'
               );
-              statusTitle.textContent = `Còn ${remPrepSec}s để căn chỉnh khuôn mặt`;
+              if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
+              statusTitle.textContent = `Còn ${remPrepSec}s căn chỉnh khuôn mặt vào mô hình`;
               statusDesc.textContent =
                 checkData.detail ||
                 'Hãy di chuyển khuôn mặt vào chính giữa khung bầu dục trên màn hình.';
@@ -881,7 +1102,7 @@
             return;
           }
 
-          // Sau khi đã hết 10 giây đếm ngược: Gửi lên `/api/biometrics/enroll-face` (yêu cầu khớp khung mô hình mới lưu)
+          // Sau khi hết 10 giây đếm ngược: Tự động chụp ngay khi đạt đủ 5 thuật toán
           const formData = new FormData();
           formData.append('userId', enrollInfo.userId);
           formData.append('image', frameBlob, 'rear_cam_hd.jpg');
@@ -891,29 +1112,40 @@
             body: formData,
           });
           const data = await resp.json();
+          renderFaceAlgorithmHud(data);
+
           if (resp.ok && data.ok) {
-            updateFaceGuideVisual('aligned', '🎉 ĐÃ LƯU KHUÔN MẶT CHUẨN HD');
+            triggerShutterFlash();
+            if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
+            updateFaceGuideVisual('aligned', '📸 ĐÃ TỰ ĐỘNG CHỤP & LƯU HD');
             teleScores.textContent = `FaceNet: 512-D (${data.resolution?.width}x${data.resolution?.height})`;
-            statusTitle.textContent = `🎉 Đã lưu Khuôn mặt cho ${enrollInfo.userName}!`;
+            statusTitle.textContent = `🎉 Đã tự động chụp & lưu Khuôn mặt cho ${enrollInfo.userName}!`;
             statusDesc.textContent =
-              'Khuôn mặt đạt chuẩn mô hình đã được lưu lên Server. Đang quay về chế độ trực mở khóa...';
+              'Khuôn mặt đạt chuẩn 5/5 thuật toán đã được lưu lên Server.';
             speakPrompt(
-              `Đã lưu khuôn mặt chuẩn cho ${enrollInfo.userName} thành công.`
+              `Đã tự động chụp và lưu khuôn mặt chuẩn cho ${enrollInfo.userName} thành công.`
             );
-            await setVisualPhase('voice');
+            enrollInfo.active = false;
+            enrollInfo.step = 'completed';
+            setTimeout(() => {
+              void setVisualPhase('voice');
+            }, 1400);
           } else {
             updateFaceGuideVisual(
               data.aligned ? 'aligned' : 'warning',
               data.countingDown
                 ? `⏳ CÒN ${data.secondsLeft}s CHUẨN BỊ`
-                : '⚠️ CHƯA KHỚP KHUNG MÔ HÌNH'
+                : '⚠️ CHỜ ĐẠT ĐỦ 5/5 THUẬT TOÁN ĐỂ TỰ CHỤP'
             );
+            if (data.aligned && btnForceSnapFace) {
+              btnForceSnapFace.classList.remove('hidden');
+            }
             statusTitle.textContent = data.countingDown
-              ? `Chuẩn bị chụp sau ${data.secondsLeft}s...`
-              : 'Vui lòng đặt khuôn mặt khớp vào khung mô hình';
+              ? `Tự động chụp sau ${data.secondsLeft}s...`
+              : 'Đang chờ khuôn mặt đạt đủ 5/5 thuật toán để tự chụp';
             statusDesc.textContent =
               data.detail ||
-              'Hãy đặt khuôn mặt nằm gọn vào giữa khung bầu dục để lưu lên Server.';
+              'Hãy đặt khuôn mặt nằm gọn vào giữa khung bầu dục — Hệ thống sẽ tự động chụp ngay khi đạt 5/5 tiêu chí!';
           }
           return;
         }
@@ -942,9 +1174,11 @@
           body: formData,
         });
         const data = await resp.json();
+        renderFaceAlgorithmHud(data);
 
         if (data.unlocked) {
           activeSessionToken = null;
+          triggerShutterFlash();
           updateFaceGuideVisual('aligned', '🔓 XÁC THỰC KHUÔN MẶT ĐẠT');
           teleScores.textContent = `Voice: ${Math.round(
             (data.voiceScore || 0.85) * 100
@@ -969,8 +1203,10 @@
             data.reason || 'Vui lòng đọc lại câu mật khẩu.';
         } else {
           updateFaceGuideVisual(
-            'warning',
-            '⚠️ ĐẶT MẶT VÀO KHUNG MÔ HÌNH'
+            data.aligned ? 'aligned' : 'warning',
+            data.aligned
+              ? '🔍 ĐANG ĐỐI CHIẾU VECTOR 512-D'
+              : '⚠️ ĐẶT MẶT VÀO KHUNG MÔ HÌNH'
           );
           if (data.faceScore !== undefined) {
             teleScores.textContent = `FaceNet Similarity: ${Math.round(
@@ -980,7 +1216,8 @@
           statusDesc.textContent =
             data.reason || 'Hãy đặt khuôn mặt vào đúng khung mô hình bầu dục...';
         }
-      } catch (_) {
+      } catch (err) {
+        console.error('Face process error:', err);
       } finally {
         isBusyUploading = false;
       }
