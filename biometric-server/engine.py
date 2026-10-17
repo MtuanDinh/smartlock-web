@@ -862,8 +862,8 @@ class BiometricEngine:
         yaw_metric = float((nt_x - eye_mid_x) / max(eye_dx, 0.04))
 
         # Pitch metric: tỷ lệ độ cao mũi giữa trục mắt và trục miệng
-        # Mũi nhích lên trục mắt -> pitch < 0.38 (Ngẩng lên)
-        # Mũi chúc xuống trục miệng -> pitch > 0.62 (Cúi xuống)
+        # Mũi nhích lên trục mắt -> pitch <= 0.46 (Ngẩng lên)
+        # Mũi chúc xuống trục miệng -> pitch >= 0.55 (Cúi xuống)
         pitch_metric = float((nt_y - eye_mid_y) / face_vert)
 
         pass_pose = True
@@ -881,64 +881,64 @@ class BiometricEngine:
                 pass_pose = False
                 pose_reason = "Khuôn mặt đang quay nghiêng. Hãy nhìn thẳng trực diện vào camera sau."
                 val_pose = f"Quay nghiêng (Yaw {yaw_metric:+.2f})"
-            elif pitch_metric < 0.38:
+            elif pitch_metric < 0.40:
                 pass_pose = False
                 pose_reason = "Đầu đang ngẩng cao. Hãy nhìn thẳng trực diện vào camera sau."
-                val_pose = f"Đang ngẩng (Pitch {pitch_metric:.2f})"
-            elif pitch_metric > 0.62:
+                val_pose = f"Đang ngẩng (Pitch {pitch_metric:.2f} < 0.40)"
+            elif pitch_metric > 0.60:
                 pass_pose = False
                 pose_reason = "Đầu đang cúi thấp. Hãy nhìn thẳng trực diện vào camera sau."
-                val_pose = f"Đang cúi (Pitch {pitch_metric:.2f})"
+                val_pose = f"Đang cúi (Pitch {pitch_metric:.2f} > 0.60)"
             else:
                 val_pose = f"Trực diện (Góc {round(roll_deg, 1)}°)"
         elif pose_key == "left":
             pose_name = "4. Góc quay sang Trái"
-            if yaw_metric < 0.16:
+            if yaw_metric < 0.14:
                 pass_pose = False
-                pose_reason = "Hãy quay mặt nhẹ sang TRÁI (khoảng 20°)."
-                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} < +0.16)"
+                pose_reason = "Hãy quay mặt nhẹ sang TRÁI (khoảng 15°–20°)."
+                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} cần ≥ +0.14)"
             elif pitch_metric < 0.32 or pitch_metric > 0.68:
                 pass_pose = False
                 pose_reason = "Hãy giữ độ cao đầu vừa phải khi quay sang TRÁI."
                 val_pose = f"Lệch ngẩng/cúi ({pitch_metric:.2f})"
             else:
-                val_pose = f"Đạt góc Trái (Yaw {yaw_metric:+.2f})"
+                val_pose = f"Đạt góc Trái (Yaw {yaw_metric:+.2f} ≥ +0.14)"
         elif pose_key == "right":
             pose_name = "4. Góc quay sang Phải"
-            if yaw_metric > -0.16:
+            if yaw_metric > -0.14:
                 pass_pose = False
-                pose_reason = "Hãy quay mặt nhẹ sang PHẢI (khoảng 20°)."
-                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} > -0.16)"
+                pose_reason = "Hãy quay mặt nhẹ sang PHẢI (khoảng 15°–20°)."
+                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} cần ≤ -0.14)"
             elif pitch_metric < 0.32 or pitch_metric > 0.68:
                 pass_pose = False
                 pose_reason = "Hãy giữ độ cao đầu vừa phải khi quay sang PHẢI."
                 val_pose = f"Lệch ngẩng/cúi ({pitch_metric:.2f})"
             else:
-                val_pose = f"Đạt góc Phải (Yaw {yaw_metric:+.2f})"
+                val_pose = f"Đạt góc Phải (Yaw {yaw_metric:+.2f} ≤ -0.14)"
         elif pose_key == "up":
             pose_name = "4. Góc ngẩng Lên trên"
-            if pitch_metric > 0.38:
+            if pitch_metric > 0.46:
                 pass_pose = False
-                pose_reason = "Hãy ngẩng nhẹ đầu LÊN TRÊN (khoảng 15°–25°)."
-                val_pose = f"Chưa đủ ngẩng (Pitch {pitch_metric:.2f} > 0.38)"
+                pose_reason = "Hãy ngẩng nhẹ đầu LÊN TRÊN (khoảng 10°–20°)."
+                val_pose = f"Chưa đủ ngẩng (Pitch {pitch_metric:.2f} cần ≤ 0.46)"
             elif abs(yaw_metric) > 0.28:
                 pass_pose = False
                 pose_reason = "Hãy giữ mặt ở giữa khi ngẩng đầu lên trên."
                 val_pose = f"Lệch quay ngang ({yaw_metric:+.2f})"
             else:
-                val_pose = f"Đạt góc Ngẩng (Pitch {pitch_metric:.2f})"
+                val_pose = f"Đạt góc Ngẩng (Pitch {pitch_metric:.2f} ≤ 0.46)"
         elif pose_key == "down":
             pose_name = "4. Góc cúi Xuống dưới"
-            if pitch_metric < 0.62:
+            if pitch_metric < 0.55:
                 pass_pose = False
-                pose_reason = "Hãy cúi nhẹ đầu XUỐNG DƯỚI (khoảng 15°–25°)."
-                val_pose = f"Chưa đủ cúi (Pitch {pitch_metric:.2f} < 0.62)"
+                pose_reason = "Hãy cúi nhẹ đầu XUỐNG DƯỚI (khoảng 10°–20°)."
+                val_pose = f"Chưa đủ cúi (Pitch {pitch_metric:.2f} cần ≥ 0.55)"
             elif abs(yaw_metric) > 0.28:
                 pass_pose = False
                 pose_reason = "Hãy giữ mặt ở giữa khi cúi đầu xuống dưới."
                 val_pose = f"Lệch quay ngang ({yaw_metric:+.2f})"
             else:
-                val_pose = f"Đạt góc Cúi (Pitch {pitch_metric:.2f})"
+                val_pose = f"Đạt góc Cúi (Pitch {pitch_metric:.2f} ≥ 0.55)"
         else:  # "any"
             pose_name = "4. Tư thế khuôn mặt"
             val_pose = f"Hợp lệ (Yaw {yaw_metric:+.2f} | Pitch {pitch_metric:.2f})"
