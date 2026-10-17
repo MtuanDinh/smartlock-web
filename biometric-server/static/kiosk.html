@@ -84,7 +84,7 @@
       </div>
       <h2 class="text-lg font-extrabold text-white">Kích Hoạt Cụm Mic &amp; Camera Sau HD</h2>
       <p class="text-xs text-slate-300 leading-relaxed">
-        Chạm <strong>1 lần duy nhất</strong> để khởi tạo Microphone (VAD tự động thu giọng nói) và <strong>Camera sau độ phân giải cao (Full HD)</strong>.
+        Chạm <strong>1 lần duy nhất</strong> để khởi tạo Microphone (VAD tự động thu giọng nói &amp; xử lý Transcript) và <strong>Camera sau độ phân giải cao (Full HD)</strong>.
       </p>
 
       <!-- Cảnh báo tự động nếu đang mở qua HTTP thường (không phải HTTPS) trên điện thoại -->
@@ -137,13 +137,15 @@
         <p class="text-xs font-bold text-white mt-1">
           Thành viên: <span id="enroll-user-name" class="text-amber-300 font-extrabold">—</span>
         </p>
-        <p id="enroll-passphrase-hint" class="text-[11px] text-amber-200/90 mt-0.5"></p>
+        <p id="enroll-passphrase-hint" class="text-[11px] text-amber-200/90 mt-0.5">
+          Hãy nói một câu mật khẩu bất kỳ (tối thiểu 2 từ) vào mic — Hệ thống sẽ tự nhận diện Transcript và lưu làm mật khẩu giọng nói.
+        </p>
       </div>
 
       <!-- Step Indicator Pills -->
       <div class="grid grid-cols-2 gap-2 text-xs font-bold">
         <div id="step-pill-voice" class="rounded-xl py-2 px-3 border border-blue-400/50 bg-blue-500/20 text-blue-200 flex items-center justify-center gap-1.5">
-          <span>1. Giọng nói + Câu lệnh</span>
+          <span>1. Giọng nói + Transcript</span>
         </div>
         <div id="step-pill-face" class="rounded-xl py-2 px-3 border border-slate-700 bg-slate-800/60 text-slate-400 flex items-center justify-center gap-1.5">
           <span>2. Khuôn mặt (Cam sau HD)</span>
@@ -165,7 +167,7 @@
           <div id="vad-meter" class="h-full bg-gradient-to-r from-sky-400 via-blue-500 to-emerald-400 transition-all duration-75" style="width: 4%"></div>
         </div>
         <p class="text-[11px] font-mono text-slate-400 mt-1.5">
-          Tự động thu âm khi phát hiện tiếng nói (Không cần chạm)
+          Tự động thu âm &amp; xử lý Transcript khi bạn nói câu mật khẩu
         </p>
       </div>
 
@@ -206,8 +208,8 @@
           <span id="tele-mode" class="text-emerald-400 font-bold">TRỰC MỞ KHÓA TỰ ĐỘNG</span>
         </div>
         <div class="flex justify-between text-slate-400">
-          <span>Câu vừa nhận diện (ASR):</span>
-          <span id="tele-transcript" class="text-sky-300 truncate max-w-[190px]">—</span>
+          <span>Transcript vừa nhận diện:</span>
+          <span id="tele-transcript" class="text-sky-300 font-bold truncate max-w-[195px]">—</span>
         </div>
         <div class="flex justify-between text-slate-400">
           <span>Điểm SpeechBrain / FaceNet:</span>
@@ -219,7 +221,7 @@
 
   <!-- Footer Info -->
   <footer class="text-center text-[11px] text-slate-500 font-mono">
-    SpeechBrain ECAPA-TDNN (192-D) • Vietnamese ASR • FaceNet (512-D Rear Cam HD)
+    SpeechBrain (192-D) • Auto Transcript ASR • FaceNet (512-D Rear Cam HD)
   </footer>
 
   <script>
@@ -257,7 +259,6 @@
     const teleTranscript = document.getElementById('tele-transcript');
     const teleScores = document.getElementById('tele-scores');
 
-    // Kiểm tra ngay khi tải trang: nếu đang ở HTTP thường (không phải localhost) khiến mediaDevices bị ẩn
     btnGotoHttps.href = httpsTargetUrl;
     const isInsecureLan =
       window.location.protocol === 'http:' &&
@@ -291,15 +292,29 @@
     let activeSessionUser = '';
     let sessionExpiresAt = 0;
     let isBusyUploading = false;
+    let isPollingState = false;
+    let isTtsSpeaking = false;
     let lastFaceScanAt = 0;
 
+    // Tham số VAD chống nhiễu nền & chống tự kích hoạt khi im lặng
     const TARGET_SAMPLE_RATE = 16000;
     let preRollBuffer = [];
     let recordingChunks = [];
     let isSpeaking = false;
     let speechStartTime = 0;
     let lastVoiceActiveTime = 0;
+    let voicedFrameCount = 0;
+    let peakRmsInSegment = 0;
+    let noiseFloor = 0.015;
     let cooldownUntil = 0;
+
+    function resetVadBuffer() {
+      isSpeaking = false;
+      recordingChunks = [];
+      preRollBuffer = [];
+      voicedFrameCount = 0;
+      peakRmsInSegment = 0;
+    }
 
     function showErrorDetail(msg) {
       errorDetailBox.classList.remove('hidden');
@@ -309,12 +324,28 @@
     function speakPrompt(text) {
       try {
         if (!('speechSynthesis' in window)) return;
+        // Tạm ngắt thu âm VAD trong lúc loa điện thoại đang phát hướng dẫn để mic không thu lại tiếng loa
+        isTtsSpeaking = true;
+        resetVadBuffer();
+        cooldownUntil = Date.now() + 2600;
         window.speechSynthesis.cancel();
         const utter = new SpeechSynthesisUtterance(text);
         utter.lang = 'vi-VN';
         utter.rate = 1.05;
+        utter.onend = () => {
+          isTtsSpeaking = false;
+          resetVadBuffer();
+          cooldownUntil = Date.now() + 700;
+        };
+        utter.onerror = () => {
+          isTtsSpeaking = false;
+          resetVadBuffer();
+          cooldownUntil = Date.now() + 500;
+        };
         window.speechSynthesis.speak(utter);
-      } catch (_) {}
+      } catch (_) {
+        isTtsSpeaking = false;
+      }
     }
 
     function downsampleTo16kHz(float32Array, inputSampleRate) {
@@ -460,6 +491,7 @@
     });
 
     async function setVisualPhase(phase) {
+      resetVadBuffer();
       if (phase === 'voice') {
         voiceVisual.classList.remove('hidden');
         cameraVisual.classList.add('hidden');
@@ -485,28 +517,70 @@
       }
     }
 
+    /**
+     * Luồng xử lý 2 giai đoạn cho âm thanh vừa thu:
+     * Bước 1: Gửi tới `/api/biometrics/transcribe` để xử lý Transcript tiếng Việt trước.
+     *         Nếu không có tiếng nói thực sự hoặc không nhận diện được chữ -> Dừng ngay, không xác thực nhầm!
+     * Bước 2: Gửi `audio` + `transcript` vừa nhận diện lên `/enroll-voice` (tự động lưu làm mật khẩu giọng nói)
+     *         hoặc `/verify-voice` (đối chiếu với câu mật khẩu & giọng nói đã lưu).
+     */
     async function handleCapturedVoiceBlob(wavBlob) {
       if (isBusyUploading) return;
       isBusyUploading = true;
-      vadStateLabel.textContent = 'ĐANG XỬ LÝ';
+      vadStateLabel.textContent = 'XỬ LÝ CHỮ...';
       vadIcon.textContent = '⏳';
 
       try {
+        // BƯỚC A: Xử lý Transcript trước
+        const transForm = new FormData();
+        transForm.append('audio', wavBlob, 'voice_16k.wav');
+
+        const transResp = await fetch(`${API_BASE}/api/biometrics/transcribe`, {
+          method: 'POST',
+          body: transForm,
+        });
+        const transData = await transResp.json();
+        const recognizedTranscript = (transData.transcript || '').trim();
+
+        // Nếu không phát hiện câu nói tiếng Việt thực sự -> Tuyệt đối không gửi xác thực hoặc tự nhận câu lệnh!
+        if (!transResp.ok || !transData.hasSpeech || !recognizedTranscript) {
+          if (
+            currentServerMode === 'enroll' &&
+            enrollInfo.active &&
+            enrollInfo.step === 'waiting_voice'
+          ) {
+            teleTranscript.textContent = '(chưa rõ chữ)';
+            statusTitle.textContent = `Đang chờ ${enrollInfo.userName} nói câu mật khẩu...`;
+            statusDesc.textContent =
+              transData.detail ||
+              'Hãy nói rõ một câu mật khẩu bất kỳ (tối thiểu 2 từ) vào mic điện thoại.';
+          } else {
+            // Ở chế độ trực mở khóa tự động: giữ im lặng ở Bước 1, không báo lỗi giả và không chuyển sang Bước 2
+            statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
+            statusDesc.textContent =
+              'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+          }
+          cooldownUntil = Date.now() + 900;
+          return;
+        }
+
+        // Hiển thị ngay câu Transcript vừa nhận diện được lên màn hình điện thoại
+        teleTranscript.textContent = `"${recognizedTranscript}"`;
+        vadStateLabel.textContent = 'ĐỐI CHIẾU AI';
+
         const formData = new FormData();
         formData.append('audio', wavBlob, 'voice_16k.wav');
+        formData.append('transcript', recognizedTranscript);
 
+        // BƯỚC B1: Nếu đang ở chế độ Đăng ký mẫu (Enroll) -> Gửi Transcript + Audio lên Server lưu luôn!
         if (
           currentServerMode === 'enroll' &&
           enrollInfo.active &&
           enrollInfo.step === 'waiting_voice'
         ) {
-          statusTitle.textContent = `Đang trích xuất giọng nói cho ${enrollInfo.userName}...`;
-          statusDesc.textContent =
-            'SpeechBrain (192-D) + Vietnamese ASR đang xử lý mẫu thu âm...';
+          statusTitle.textContent = `Đang lưu câu lệnh "${recognizedTranscript}"...`;
+          statusDesc.textContent = `Đang trích xuất vector giọng nói 192 chiều cho ${enrollInfo.userName}...`;
           formData.append('userId', enrollInfo.userId);
-          if (enrollInfo.expectedPassphrase) {
-            formData.append('passphrase', enrollInfo.expectedPassphrase);
-          }
 
           const resp = await fetch(`${API_BASE}/api/biometrics/enroll-voice`, {
             method: 'POST',
@@ -516,40 +590,52 @@
           if (!resp.ok || !data.ok) {
             statusTitle.textContent = 'Chưa lưu được mẫu giọng nói';
             statusDesc.textContent =
-              data.detail || 'Vui lòng đọc lại câu mật khẩu rõ ràng hơn.';
+              data.detail || 'Vui lòng nói một câu mật khẩu từ 2 từ trở lên.';
             cooldownUntil = Date.now() + 1400;
           } else {
-            teleTranscript.textContent = data.voicePassphrase || 'Đã lưu';
+            teleTranscript.textContent = `"${data.voicePassphrase}" (ĐÃ LƯU)`;
             teleScores.textContent = `SpeechBrain: 192-D OK`;
             if (data.nextStep === 'waiting_face') {
               statusTitle.textContent =
-                'Đã lưu giọng nói! Chuyển sang chụp Khuôn mặt...';
-              statusDesc.textContent = `Mời ${enrollInfo.userName} nhìn vào Camera sau (HD) của điện thoại.`;
+                `Đã lưu câu lệnh "${data.voicePassphrase}"!`;
+              statusDesc.textContent = `Chuyển sang Bước 2: Mời ${enrollInfo.userName} nhìn vào Camera sau (HD).`;
               speakPrompt(
-                `Đã lưu giọng nói. Mời ${enrollInfo.userName} nhìn vào camera sau của điện thoại.`
+                `Đã lưu câu lệnh ${data.voicePassphrase}. Mời ${enrollInfo.userName} nhìn vào camera sau của điện thoại.`
               );
               await setVisualPhase('face');
-              cooldownUntil = Date.now() + 1200;
             } else {
-              statusTitle.textContent = 'Đã đăng ký Giọng nói thành công!';
-              statusDesc.textContent = `Mẫu giọng nói của ${enrollInfo.userName} đã được lưu lên Firebase.`;
-              speakPrompt(`Đã lưu giọng nói thành công.`);
-              cooldownUntil = Date.now() + 2500;
+              statusTitle.textContent = '🎉 Đã đăng ký Giọng nói thành công!';
+              statusDesc.textContent = `Đã lưu câu mật khẩu "${data.voicePassphrase}" cho ${enrollInfo.userName}.`;
+              speakPrompt(
+                `Đã lưu giọng nói với câu mật khẩu ${data.voicePassphrase} thành công.`
+              );
             }
           }
           return;
         }
 
-        statusTitle.textContent = 'Đang xác thực Giọng nói & Câu mật khẩu...';
+        // BƯỚC B2: Chế độ Xác thực mở khóa (Verify) -> Gửi Transcript + Audio đối chiếu với DB
+        statusTitle.textContent = `Đang kiểm tra: "${recognizedTranscript}"...`;
         statusDesc.textContent =
-          'Đối chiếu vector SpeechBrain 192-D và nội dung câu nói...';
+          'Đối chiếu Transcript và đặc trưng giọng nói SpeechBrain 192-D...';
 
         const resp = await fetch(`${API_BASE}/api/biometrics/verify-voice`, {
           method: 'POST',
           body: formData,
         });
         const data = await resp.json();
-        teleTranscript.textContent = data.spokenText || '(không rõ)';
+
+        if (data.silence) {
+          statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
+          statusDesc.textContent =
+            'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+          return;
+        }
+
+        teleTranscript.textContent = data.spokenText
+          ? `"${data.spokenText}"`
+          : `"${recognizedTranscript}"`;
+
         if (data.voiceScore !== undefined) {
           teleScores.textContent = `Voice: ${Math.round(
             data.voiceScore * 100
@@ -562,18 +648,17 @@
           sessionExpiresAt = Date.now() + (data.expiresInSeconds || 35) * 1000;
           await setVisualPhase('face');
           statusTitle.textContent = `Xin chào ${data.userName}! Nhìn vào Camera sau`;
-          statusDesc.textContent =
-            'Bước 1 (Giọng nói + Câu lệnh) ĐẠT. Đang chụp ảnh HD từ Camera sau để xác thực khuôn mặt...';
+          statusDesc.textContent = `Khớp câu lệnh "${data.spokenText}" & giọng nói. Đang quét khuôn mặt từ Camera sau HD...`;
           speakPrompt(
             `Xin chào ${data.userName}, vui lòng nhìn vào camera sau để mở khóa.`
           );
         } else {
           statusTitle.textContent = 'Chưa khớp Giọng nói / Câu mật khẩu';
           statusDesc.textContent =
-            data.reason || 'Vui lòng đọc lại đúng câu mật khẩu đã đăng ký.';
+            data.reason || 'Vui lòng đọc đúng câu mật khẩu đã đăng ký.';
           cooldownUntil = Date.now() + 1400;
         }
-      } catch (err) {
+      } catch (_) {
         statusTitle.textContent = 'Lỗi kết nối tới Biometric Server';
         statusDesc.textContent = 'Đang tự động thử lại...';
         cooldownUntil = Date.now() + 1800;
@@ -631,7 +716,6 @@
             speakPrompt(
               `Đã lưu khuôn mặt cho ${enrollInfo.userName} thành công.`
             );
-            cooldownUntil = Date.now() + 2800;
             await setVisualPhase('voice');
           } else {
             statusDesc.textContent =
@@ -674,7 +758,6 @@
           statusDesc.textContent =
             'Đã gửi lệnh mở khóa (/SmartLock/Control/Remote_Open = true). Tự động khóa lại sau 4 giây.';
           speakPrompt(`Xác thực thành công. Đã mở cửa cho ${data.userName}.`);
-          cooldownUntil = Date.now() + 4000;
           setTimeout(() => {
             if (currentServerMode === 'verify') {
               void setVisualPhase('voice');
@@ -705,7 +788,8 @@
     }
 
     async function pollKioskState() {
-      if (!kioskStarted) return;
+      if (!kioskStarted || isPollingState) return;
+      isPollingState = true;
       try {
         const resp = await fetch(`${API_BASE}/api/biometrics/kiosk-state`);
         if (!resp.ok) return;
@@ -726,27 +810,25 @@
               : enrollInfo.target === 'voice'
                 ? 'CHỈ GIỌNG NÓI'
                 : 'CHỈ KHUÔN MẶT';
-          enrollPassphraseHint.textContent = enrollInfo.expectedPassphrase
-            ? `Câu mật khẩu cần đọc: "${enrollInfo.expectedPassphrase}"`
-            : 'Hãy đọc một câu mật khẩu bất kỳ để hệ thống lưu lại.';
+          enrollPassphraseHint.textContent =
+            'Hãy nói bất kỳ câu mật khẩu nào (tối thiểu 2 từ) vào điện thoại — Hệ thống tự nhận diện Transcript và lưu làm mật khẩu.';
           teleMode.textContent = 'CHẾ ĐỘ ĐĂNG KÝ MẪU (ADMIN)';
           teleMode.className = 'text-amber-400 font-bold';
 
           if (enrollInfo.step === 'waiting_voice') {
-            await setVisualPhase('voice');
             if (prevMode !== 'enroll' || prevStep !== 'waiting_voice') {
-              statusTitle.textContent = `Đăng ký Giọng nói: ${enrollInfo.userName}`;
+              await setVisualPhase('voice');
+              statusTitle.textContent = `Thu Giọng nói: ${enrollInfo.userName}`;
               statusDesc.textContent =
-                enrollInfo.message ||
-                'Hãy nói câu mật khẩu vào điện thoại (Tự động thu âm VAD)...';
+                'Hãy nói một câu mật khẩu bất kỳ (VD: "mở cửa cho tôi") để hệ thống xử lý Transcript và lưu lên Server.';
               speakPrompt(
-                `Mời ${enrollInfo.userName} đọc câu mật khẩu vào điện thoại.`
+                `Mời ${enrollInfo.userName} nói một câu mật khẩu bất kỳ vào điện thoại.`
               );
             }
           } else if (enrollInfo.step === 'waiting_face') {
-            await setVisualPhase('face');
-            camCountdown.textContent = 'ENROLL HD';
             if (prevStep !== 'waiting_face') {
+              await setVisualPhase('face');
+              camCountdown.textContent = 'ENROLL HD';
               statusTitle.textContent = `Chụp Khuôn mặt HD: ${enrollInfo.userName}`;
               statusDesc.textContent =
                 enrollInfo.message ||
@@ -772,11 +854,13 @@
               'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
           }
         }
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        isPollingState = false;
+      }
     }
 
     btnStartKiosk.addEventListener('click', async () => {
-      // Nếu đang ở HTTP thường khiến trình duyệt ẩn navigator.mediaDevices -> Tự động chuyển sang HTTPS 8443
       if (isInsecureLan && (!window.isSecureContext || !navigator.mediaDevices)) {
         window.location.href = httpsTargetUrl;
         return;
@@ -789,13 +873,13 @@
           navigator.wakeLock.request('screen').catch(() => {});
         }
 
-        // 1. Xin quyền Microphone trước (với fallback linh hoạt)
+        // 1. Xin quyền Microphone trước
         micStream = await getMediaStreamWithFallback([
           {
             audio: {
               echoCancellation: true,
               noiseSuppression: true,
-              autoGainControl: true,
+              autoGainControl: false,
             },
             video: false,
           },
@@ -818,11 +902,16 @@
         scriptProcessor.connect(audioCtx.destination);
 
         const inputSampleRate = audioCtx.sampleRate;
-        const maxPreRollChunks = 4;
+        const maxPreRollChunks = 3;
 
         scriptProcessor.onaudioprocess = (event) => {
           const isVoicePhase = !voiceVisual.classList.contains('hidden');
-          if (!isVoicePhase || isBusyUploading || Date.now() < cooldownUntil) {
+          if (
+            !isVoicePhase ||
+            isBusyUploading ||
+            isTtsSpeaking ||
+            Date.now() < cooldownUntil
+          ) {
             return;
           }
 
@@ -831,25 +920,34 @@
           for (let i = 0; i < input.length; i++) sumSq += input[i] * input[i];
           const rms = Math.sqrt(sumSq / input.length);
 
-          const pct = Math.min(100, Math.max(4, Math.round(rms * 650)));
+          // Cập nhật nền nhiễu thích nghi khi không nói
+          if (!isSpeaking && rms < 0.04) {
+            noiseFloor = 0.92 * noiseFloor + 0.08 * rms;
+          }
+          const dynamicVoiceThreshold = Math.max(0.042, noiseFloor * 2.8);
+
+          const pct = Math.min(100, Math.max(4, Math.round(rms * 600)));
           vadMeter.style.width = `${pct}%`;
-          vadCore.style.transform = `scale(${1 + Math.min(0.22, rms * 1.8)})`;
+          vadCore.style.transform = `scale(${1 + Math.min(0.22, rms * 1.6)})`;
 
           const chunk16k = downsampleTo16kHz(
             new Float32Array(input),
             inputSampleRate
           );
           const now = Date.now();
-          const VOICE_RMS_THRESHOLD = 0.022;
 
-          if (rms > VOICE_RMS_THRESHOLD) {
+          if (rms > dynamicVoiceThreshold) {
             if (!isSpeaking) {
               isSpeaking = true;
               speechStartTime = now;
+              voicedFrameCount = 0;
+              peakRmsInSegment = rms;
               recordingChunks = [...preRollBuffer];
               vadStateLabel.textContent = 'ĐANG THU...';
               vadIcon.textContent = '🔴';
             }
+            voicedFrameCount += 1;
+            if (rms > peakRmsInSegment) peakRmsInSegment = rms;
             lastVoiceActiveTime = now;
             recordingChunks.push(chunk16k);
           } else {
@@ -859,14 +957,23 @@
             } else {
               recordingChunks.push(chunk16k);
               const silenceMs = now - lastVoiceActiveTime;
-              const totalSpeechMs = now - speechStartTime;
+              const voicedSpanMs = lastVoiceActiveTime - speechStartTime;
+              const totalElapsedMs = now - speechStartTime;
 
-              if (silenceMs > 880 || totalSpeechMs > 4600) {
-                isSpeaking = false;
+              if (silenceMs > 850 || totalElapsedMs > 4600) {
                 const captured = recordingChunks;
-                recordingChunks = [];
-                preRollBuffer = [];
-                if (totalSpeechMs >= 450) {
+                const finalVoicedFrames = voicedFrameCount;
+                const finalVoicedSpan = voicedSpanMs;
+                const finalPeakRms = peakRmsInSegment;
+                resetVadBuffer();
+
+                // Chỉ gửi lên server khi thực sự có tối thiểu 6 khung giọng nói (~500ms phát âm liên tục)
+                // Loại bỏ hoàn toàn tiếng gõ nhẹ, tiếng ồn phòng hoặc khoảng lặng!
+                if (
+                  finalVoicedFrames >= 6 &&
+                  finalVoicedSpan >= 450 &&
+                  finalPeakRms >= 0.048
+                ) {
                   const wavBlob = encodeWav16kHz(captured);
                   void handleCapturedVoiceBlob(wavBlob);
                 } else {

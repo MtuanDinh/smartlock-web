@@ -410,7 +410,7 @@ export function useUsers() {
     async (
       user: { id: string; name: string; status?: UserStatus },
       target: BiometricEnrollTarget,
-      expectedPassphrase: string
+      expectedPassphrase?: string
     ) => {
       if (!service || !isClientConnected) return;
       if (user.status === 'disabled') {
@@ -427,9 +427,7 @@ export function useUsers() {
           userId: user.id,
           userName: user.name,
           target,
-          expectedPassphrase:
-            expectedPassphrase.trim() ||
-            `mở cửa cho ${user.name.toLowerCase()}`,
+          expectedPassphrase: (expectedPassphrase ?? '').trim(),
         });
       } catch {
         showToast({

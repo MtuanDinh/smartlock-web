@@ -1,7 +1,9 @@
 """
 Biometric AI Engine cho Smart Lock IoT:
-1. Nhận diện Người nói (Speaker Recognition) bằng SpeechBrain (`speechbrain/spkrec-ecapa-voxceleb` - 192 chiều).
-2. Nhận diện Câu nói mật khẩu (Vietnamese ASR) để kiểm tra khớp nội dung câu nói (`voicePassphrase`).
+1. Nhận diện Người nói (Speaker Recognition) bằng SpeechBrain (`speechbrain/spkrec-ecapa-voxceleb` - 192 chiều)
+   kèm bộ mã hóa Zero-Mean Mel-Cepstral & Pitch Harmonic 192 chiều (CMVN) chống nhiễu nền.
+2. Nhận diện Câu nói tiếng Việt (Vietnamese ASR Transcript) để tự động lưu câu mật khẩu khi đăng ký
+   và đối chiếu chính xác nội dung câu nói khi mở khóa.
 3. Nhận diện Khuôn mặt (Face Recognition) bằng FaceNet PyTorch (`MTCNN` + `InceptionResnetV1` - 512 chiều)
    tối ưu cho ảnh độ phân giải cao chụp từ Camera sau của điện thoại.
 """
@@ -13,10 +15,9 @@ import logging
 import math
 import os
 import re
-import tempfile
 import unicodedata
 from difflib import SequenceMatcher
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 from PIL import Image, ImageOps
@@ -36,21 +37,37 @@ def normalize_vietnamese_phrase(text: str) -> str:
 
 def compute_phrase_similarity(spoken: str, expected: str) -> float:
     """
-    Tính độ tương đồng giữa câu vừa nói (ASR) và câu mật khẩu đã lưu trong DB.
-    Trả về điểm từ 0.0 -> 1.0.
+    Tính độ tương đồng chặt chẽ giữa câu vừa nói (ASR Transcript) và câu mật khẩu đã lưu trong DB.
+    Trả về điểm từ 0.0 -> 1.0. Nếu 1 trong 2 rỗng -> luôn trả về 0.0.
     """
     s_norm = normalize_vietnamese_phrase(spoken)
     e_norm = normalize_vietnamese_phrase(expected)
     if not s_norm or not e_norm:
         return 0.0
-    if s_norm == e_norm or e_norm in s_norm:
+    if s_norm == e_norm:
         return 1.0
 
+    s_list = s_norm.split()
+    e_list = e_norm.split()
+    if not s_list or not e_list:
+        return 0.0
+
+    # Nếu câu kỳ vọng có từ 2 từ trở lên và xuất hiện nguyên vẹn trong câu nói (với độ dài tương đương)
+    if len(e_list) >= 2 and e_norm in s_norm and len(s_list) <= len(e_list) + 2:
+        return 0.95
+
     seq_ratio = SequenceMatcher(None, s_norm, e_norm).ratio()
-    s_tokens = set(s_norm.split())
-    e_tokens = set(e_norm.split())
-    token_overlap = len(s_tokens & e_tokens) / max(len(e_tokens), 1)
-    return float(max(seq_ratio, 0.55 * seq_ratio + 0.45 * token_overlap))
+    s_tokens = set(s_list)
+    e_tokens = set(e_list)
+    common = len(s_tokens & e_tokens)
+    if common == 0:
+        # Không có bất kỳ từ nào trùng -> phạt nặng để tránh khớp nhầm âm tiết ngẫu nhiên
+        return float(seq_ratio * 0.35)
+
+    precision = common / max(len(s_tokens), 1)
+    recall = common / max(len(e_tokens), 1)
+    token_f1 = (2.0 * precision * recall) / max(precision + recall, 1e-6)
+    return float(0.45 * seq_ratio + 0.55 * token_f1)
 
 
 def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
@@ -77,11 +94,10 @@ def l2_normalize(vec: np.ndarray) -> List[float]:
 class BiometricEngine:
     """
     Quản lý mô hình SpeechBrain (192-D), Vietnamese ASR và FaceNet-PyTorch (512-D).
-    Tự động nạp trọng số pretrained khi khởi tạo và hỗ trợ cơ chế fallback an toàn.
     """
 
     VOICE_THRESHOLD = 0.70
-    PASSPHRASE_THRESHOLD = 0.78
+    PASSPHRASE_THRESHOLD = 0.76
     FACE_THRESHOLD = 0.68
 
     def __init__(self) -> None:
@@ -91,7 +107,17 @@ class BiometricEngine:
         self.speechbrain_ready = False
         self.facenet_ready = False
         self.asr_ready = False
+        self._dct_matrix = self._build_dct_matrix(n_mfcc=32, n_mels=64)
         self._init_models()
+
+    @staticmethod
+    def _build_dct_matrix(n_mfcc: int, n_mels: int) -> np.ndarray:
+        """Tạo ma trận DCT-II trực giao để trích xuất hệ số Cepstral (MFCC) có trung bình bằng 0."""
+        n = np.arange(n_mels, dtype=np.float32)
+        k = np.arange(1, n_mfcc + 1, dtype=np.float32)[:, None]  # Bỏ thành phần DC k=0
+        mat = np.cos(math.pi / n_mels * (n + 0.5) * k)
+        mat *= math.sqrt(2.0 / n_mels)
+        return mat.astype(np.float32)
 
     def _init_models(self) -> None:
         # 1. Khởi tạo SpeechRecognition (Vietnamese ASR)
@@ -100,12 +126,14 @@ class BiometricEngine:
 
             self._sr = sr
             self._recognizer = sr.Recognizer()
+            self._recognizer.dynamic_energy_threshold = False
+            self._recognizer.energy_threshold = 220
             self.asr_ready = True
             logger.info("Vietnamese ASR (SpeechRecognition) initialized.")
         except Exception as exc:
             self._sr = None
             self._recognizer = None
-            logger.warning("SpeechRecognition not available (%s), using acoustic verification.", exc)
+            logger.warning("SpeechRecognition not available (%s).", exc)
 
         # 2. Khởi tạo SpeechBrain ECAPA-TDNN (192-D Speaker Embedding)
         try:
@@ -125,7 +153,7 @@ class BiometricEngine:
             logger.info("SpeechBrain ECAPA-TDNN (192-D) loaded successfully.")
         except Exception as exc:
             logger.warning(
-                "SpeechBrain pretrained load deferred/fallback (%s). Using 192-D Spectral-Mel Speaker Encoder.",
+                "SpeechBrain pretrained load deferred/fallback (%s). Using Zero-Mean 192-D MFCC-Cepstral Speaker Encoder.",
                 exc,
             )
 
@@ -135,7 +163,6 @@ class BiometricEngine:
             from facenet_pytorch import InceptionResnetV1, MTCNN  # type: ignore
 
             self._torch = torch
-            # Tối ưu cho ảnh độ phân giải cao từ camera sau điện thoại
             self.mtcnn = MTCNN(
                 image_size=160,
                 margin=24,
@@ -158,11 +185,11 @@ class BiometricEngine:
         return {
             "speechbrain": "speechbrain/spkrec-ecapa-voxceleb (192-D)"
             if self.speechbrain_ready
-            else "speechbrain-compatible-spectral (192-D)",
+            else "speechbrain-compatible-mfcc-cmvn (192-D)",
             "facenet": "facenet-pytorch/vggface2 (512-D)"
             if self.facenet_ready
             else "facenet-compatible-spatial (512-D)",
-            "asr": "vi-VN Google/Whisper ASR" if self.asr_ready else "acoustic-passphrase",
+            "asr": "vi-VN Google ASR Transcript" if self.asr_ready else "unavailable",
             "voiceDimension": 192,
             "faceDimension": 512,
         }
@@ -197,66 +224,178 @@ class BiometricEngine:
                 data = data.mean(axis=1)
             return data, int(sr)
 
+    def _extract_voiced_frames(self, samples: np.ndarray, sr: int) -> np.ndarray:
+        """
+        Kiểm tra năng lượng tiếng nói thực tế và chỉ giữ lại các khung (frames) có giọng người.
+        Loại bỏ hoàn toàn trường hợp im lặng hoặc tiếng ồn nền kích hoạt nhầm.
+        """
+        if samples.size < int(0.45 * sr):
+            raise ValueError("Đoạn âm thanh quá ngắn. Vui lòng nói rõ câu mật khẩu vào điện thoại.")
+
+        # Khử DC offset
+        samples = samples - float(np.mean(samples))
+        peak = float(np.max(np.abs(samples)))
+        overall_rms = float(np.sqrt(np.mean(samples * samples)))
+
+        if peak < 0.045 or overall_rms < 0.012:
+            raise ValueError("Không phát hiện giọng nói (âm lượng quá nhỏ hoặc chỉ có tiếng ồn nền).")
+
+        frame_len = int(0.025 * sr)
+        hop_len = int(0.010 * sr)
+        if samples.size < frame_len * 15:
+            raise ValueError("Đoạn thu âm quá ngắn. Vui lòng nói câu mật khẩu dài hơn.")
+
+        # Tính RMS từng frame 25ms
+        n_frames = 1 + (samples.size - frame_len) // hop_len
+        frame_rms = np.empty(n_frames, dtype=np.float32)
+        for i in range(n_frames):
+            seg = samples[i * hop_len : i * hop_len + frame_len]
+            frame_rms[i] = float(np.sqrt(np.mean(seg * seg)))
+
+        # Ngưỡng tiếng nói động dựa trên nền nhiễu nhưng không thấp hơn 0.022
+        noise_floor = float(np.percentile(frame_rms, 20))
+        voice_thresh = max(0.022, noise_floor * 2.4, float(np.max(frame_rms)) * 0.18)
+        voiced_mask = frame_rms >= voice_thresh
+        voiced_count = int(np.sum(voiced_mask))
+
+        # Yêu cầu tối thiểu 30 frames có tiếng nói (~0.32 giây phát âm thực sự)
+        if voiced_count < 30:
+            raise ValueError("Chưa phát hiện câu nói rõ ràng (chỉ có tạp âm ngắn).")
+
+        voiced_indices = np.where(voiced_mask)[0]
+        start_sample = max(0, int(voiced_indices[0] * hop_len))
+        end_sample = min(samples.size, int(voiced_indices[-1] * hop_len + frame_len))
+        trimmed = samples[start_sample:end_sample]
+
+        if trimmed.size < int(0.40 * sr):
+            raise ValueError("Câu nói quá ngắn. Vui lòng đọc rõ câu mật khẩu vào điện thoại.")
+
+        # Chuẩn hóa biên độ (Peak normalization) trước khi đưa vào mô hình
+        max_abs = float(np.max(np.abs(trimmed)))
+        if max_abs > 1e-6:
+            trimmed = trimmed / max_abs
+        return trimmed
+
     def transcribe_vietnamese(self, audio_bytes: bytes) -> str:
-        """Nhận diện câu nói tiếng Việt từ đoạn ghi âm."""
+        """Nhận diện câu nói tiếng Việt (Transcript) từ đoạn ghi âm WAV."""
         if not self.asr_ready or self._sr is None or self._recognizer is None:
             return ""
+        try:
+            # Kiểm tra trước xem có tiếng nói thực sự không, nếu chỉ là tiếng ồn/im lặng thì bỏ qua ngay
+            samples, sr = self._decode_audio_bytes(audio_bytes)
+            self._extract_voiced_frames(samples, sr)
+        except ValueError:
+            return ""
+        except Exception:
+            pass
+
         try:
             with self._sr.AudioFile(io.BytesIO(audio_bytes)) as source:
                 audio_data = self._recognizer.record(source)
             transcript = self._recognizer.recognize_google(audio_data, language="vi-VN")
-            return normalize_vietnamese_phrase(str(transcript))
+            normalized = normalize_vietnamese_phrase(str(transcript))
+            if normalized:
+                logger.info("ASR recognized transcript: '%s'", normalized)
+            return normalized
+        except self._sr.UnknownValueError:
+            return ""
         except Exception as exc:
-            logger.warning("ASR transcription warning: %s", exc)
+            logger.warning("ASR transcription error: %s", exc)
             return ""
 
     def extract_voice_embedding(self, audio_bytes: bytes) -> List[float]:
         """
-        Trích xuất vector đặc trưng giọng nói 192 chiều (L2-normalized).
-        Sử dụng SpeechBrain ECAPA-TDNN nếu đã nạp, hoặc bộ trích xuất đặc trưng phổ âm thanh 192-D.
+        Trích xuất vector đặc trưng giọng nói 192 chiều (L2-normalized, Zero-Mean).
+        Sử dụng SpeechBrain ECAPA-TDNN nếu đã nạp, hoặc bộ trích xuất MFCC-Cepstral + Harmonic 192-D.
         """
         samples, sr = self._decode_audio_bytes(audio_bytes)
-        # Cắt khoảng lặng đầu/cuối
-        abs_s = np.abs(samples)
-        active_idx = np.where(abs_s > max(float(np.max(abs_s)) * 0.06, 0.008))[0]
-        if active_idx.size > 1600:
-            samples = samples[active_idx[0] : active_idx[-1] + 1]
-
-        if samples.size < 2400:
-            raise ValueError("Đoạn thu âm quá ngắn hoặc không rõ tiếng nói. Vui lòng nói rõ hơn vào điện thoại.")
+        voiced_samples = self._extract_voiced_frames(samples, sr)
 
         if self.speechbrain_ready and self.speaker_model is not None:
             import torch  # type: ignore
 
-            # Chuẩn hóa về 16000Hz nếu khác
             if sr != 16000:
-                duration = samples.size / float(sr)
+                duration = voiced_samples.size / float(sr)
                 target_len = max(1600, int(duration * 16000))
-                x_old = np.linspace(0.0, 1.0, samples.size)
+                x_old = np.linspace(0.0, 1.0, voiced_samples.size)
                 x_new = np.linspace(0.0, 1.0, target_len)
-                samples = np.interp(x_new, x_old, samples).astype(np.float32)
+                voiced_samples = np.interp(x_new, x_old, voiced_samples).astype(np.float32)
 
-            wav_tensor = torch.tensor(samples, dtype=torch.float32).unsqueeze(0)
+            wav_tensor = torch.tensor(voiced_samples, dtype=torch.float32).unsqueeze(0)
             with torch.no_grad():
                 emb = self.speaker_model.encode_batch(wav_tensor)
                 emb_np = emb.squeeze().cpu().numpy()
+            emb_np = emb_np - float(np.mean(emb_np))
             return l2_normalize(emb_np)
 
-        # Fallback: 192-D Spectral Cepstral + Pitch Harmonic Speaker Embedding
+        # Pre-emphasis filter giúp làm nổi bật formant âm sắc người nói
+        emphasized = np.append(
+            voiced_samples[0], voiced_samples[1:] - 0.97 * voiced_samples[:-1]
+        ).astype(np.float32)
+
         frame_len = int(0.025 * sr)
         hop_len = int(0.010 * sr)
-        if samples.size < frame_len * 2:
-            samples = np.pad(samples, (0, frame_len * 2 - samples.size))
-        window = np.hanning(frame_len).astype(np.float32)
-        frames = []
-        for start in range(0, samples.size - frame_len, hop_len):
-            seg = samples[start : start + frame_len] * window
-            spec = np.abs(np.fft.rfft(seg, n=512))[:96]
-            frames.append(np.log1p(spec * 20.0))
-        mat = np.vstack(frames)  # (T, 96)
-        mean_vec = np.mean(mat, axis=0)  # 96
-        std_vec = np.std(mat, axis=0)  # 96
-        emb_192 = np.concatenate([mean_vec, std_vec], axis=0)
+        window = np.hamming(frame_len).astype(np.float32)
+
+        cepstral_frames = []
+        harmonic_frames = []
+
+        for start in range(0, emphasized.size - frame_len, hop_len):
+            seg = emphasized[start : start + frame_len]
+            if float(np.sqrt(np.mean(seg * seg))) < 0.03:
+                continue
+            win_seg = seg * window
+            mag = np.abs(np.fft.rfft(win_seg, n=512))[:256]
+
+            # Gom thành 64 dải băng tần (sub-bands)
+            mel_64 = np.mean(mag.reshape(64, 4), axis=1)
+            log_mel = np.log(mel_64 + 1e-6)
+            # Trừ trung bình phổ của từng frame để khử độ lợi mic
+            log_mel = log_mel - float(np.mean(log_mel))
+
+            # Biến đổi DCT-II sang 32 hệ số MFCC (bỏ c0)
+            mfcc_32 = self._dct_matrix @ log_mel
+            cepstral_frames.append(mfcc_32)
+
+            # Đặc trưng Pitch / Harmonic Autocorrelation (32 chiều)
+            autocorr = np.correlate(win_seg, win_seg, mode="full")[frame_len - 1 :]
+            autocorr = autocorr / (autocorr[0] + 1e-6)
+            # Lấy vùng lag tương ứng tần số giọng người (75Hz -> 400Hz)
+            min_lag = max(1, int(sr / 400.0))
+            max_lag = min(frame_len - 1, int(sr / 75.0))
+            pitch_slice = autocorr[min_lag:max_lag]
+            pitch_32 = np.interp(
+                np.linspace(0, max(1, pitch_slice.size - 1), 32),
+                np.arange(max(1, pitch_slice.size)),
+                pitch_slice if pitch_slice.size > 0 else np.zeros(1, dtype=np.float32),
+            ).astype(np.float32)
+            pitch_32 = pitch_32 - float(np.mean(pitch_32))
+            harmonic_frames.append(pitch_32)
+
+        if len(cepstral_frames) < 8:
+            raise ValueError("Không đủ khung âm sắc giọng nói. Vui lòng nói rõ hơn.")
+
+        cep_mat = np.vstack(cepstral_frames)  # (T, 32)
+        harm_mat = np.vstack(harmonic_frames)  # (T, 32)
+        delta_cep = np.diff(cep_mat, axis=0)  # (T-1, 32)
+
+        # Tổng hợp 6 nhóm đặc trưng x 32 chiều = 192 chiều:
+        # 1. Mean MFCC (32)
+        # 2. Std MFCC Centered (32)
+        # 3. Delta MFCC Mean (32)
+        # 4. Delta MFCC Std Centered (32)
+        # 5. Harmonic Pitch Profile Mean (32)
+        # 6. Spectral Skew/Quantile Contrast (32)
+        f1 = np.mean(cep_mat, axis=0)
+        f2 = np.std(cep_mat, axis=0) - float(np.mean(np.std(cep_mat, axis=0)))
+        f3 = np.mean(delta_cep, axis=0)
+        f4 = np.std(delta_cep, axis=0) - float(np.mean(np.std(delta_cep, axis=0)))
+        f5 = np.mean(harm_mat, axis=0)
+        f6 = np.percentile(cep_mat, 80, axis=0) - np.percentile(cep_mat, 20, axis=0)
+        f6 = f6 - float(np.mean(f6))
+
+        emb_192 = np.concatenate([f1, f2, f3, f4, f5, f6], axis=0)
+        emb_192 = emb_192 - float(np.mean(emb_192))
         return l2_normalize(emb_192)
 
     # =========================================================================
@@ -297,20 +436,19 @@ class BiometricEngine:
             (64, 64), Image.Resampling.BICUBIC
         )
         arr = np.asarray(face_crop, dtype=np.float32) / 255.0
-        # Kiểm tra độ tương phản để đảm bảo không phải khung hình tối đen/che camera
-        if float(np.std(arr)) < 0.04:
+        if float(np.std(arr)) < 0.045:
             raise ValueError("Khung hình camera quá tối hoặc bị mờ. Vui lòng hướng camera sau vào khuôn mặt nơi đủ sáng.")
 
         gray = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
         gray = (gray - float(np.mean(gray))) / (float(np.std(gray)) + 1e-5)
 
-        # Lấy mẫu lưới 16x16 (256) + Gradient ngang/dọc 16x8 (256) = 512 chiều
         small_16 = np.asarray(
             Image.fromarray((gray * 32.0 + 128.0).clip(0, 255).astype(np.uint8)).resize(
                 (16, 16), Image.Resampling.BILINEAR
             ),
             dtype=np.float32,
         ).flatten()
+        small_16 = small_16 - float(np.mean(small_16))
         gx = np.diff(gray, axis=1)[:, :63]
         gy = np.diff(gray, axis=0)[:63, :]
         gx_128 = np.interp(
@@ -319,5 +457,6 @@ class BiometricEngine:
         gy_128 = np.interp(
             np.linspace(0, gy.size - 1, 128), np.arange(gy.size), gy.flatten()
         )
-        emb_512 = np.concatenate([small_16, gx_128, gy_128], axis=0)
+        emb_512 = np.concatenate([small_16 / 32.0, gx_128, gy_128], axis=0)
+        emb_512 = emb_512 - float(np.mean(emb_512))
         return l2_normalize(emb_512), {"width": width, "height": height}

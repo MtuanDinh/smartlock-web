@@ -4,6 +4,12 @@ FastAPI Biometric Server cho Smart Lock IoT:
   + HTTPS (cổng 8443): `https://<LAN-IP>:8443/kiosk` -> Bắt buộc cho trình duyệt điện thoại (Chrome/Safari)
     cấp quyền `navigator.mediaDevices.getUserMedia` (WebRTC Mic VAD + Camera sau Full HD) qua mạng LAN.
   + HTTP  (cổng 8000): `http://<LAN-IP>:8000/kiosk`  -> Tự động điều hướng sang HTTPS 8443 khi mở trên điện thoại.
+- Luồng xử lý Giọng nói mới:
+  1. Điện thoại thu tiếng nói thực tế (lọc nhiễu VAD) -> Xử lý Transcript (`/api/biometrics/transcribe`) trước.
+  2. Khi Đăng ký (Enroll): Tự động lấy Transcript người dùng vừa nói để lưu làm `voicePassphrase` lên Server/Firebase
+     mà Admin không cần nhập câu lệnh thủ công.
+  3. Khi Mở khóa (Verify): Bắt buộc phải nhận diện được Transcript thực tế từ câu nói của người dùng VÀ khớp cả
+     nội dung câu nói lẫn giọng nói (192-D) thì mới chuyển sang xác thực khuôn mặt. Tuyệt đối không tự xác nhận khi im lặng.
 """
 
 from __future__ import annotations
@@ -133,8 +139,8 @@ FIREBASE_DB_URL = _load_firebase_db_url()
 engine = BiometricEngine()
 
 app = FastAPI(
-    title="SmartLock Biometric AI Server (SpeechBrain + ASR + FaceNet)",
-    version="2.1.0",
+    title="SmartLock Biometric AI Server (SpeechBrain + ASR Transcript + FaceNet)",
+    version="2.2.0",
 )
 
 app.add_middleware(
@@ -234,22 +240,68 @@ def get_kiosk_state() -> Dict[str, Any]:
     }
 
 
+@app.post("/api/biometrics/transcribe")
+async def transcribe_voice_audio(audio: UploadFile = File(...)) -> JSONResponse:
+    """
+    Bước xử lý Transcript từ âm thanh thu trên điện thoại trước khi gửi lưu/đối chiếu:
+    - Kiểm tra đoạn thu có thực sự chứa giọng nói con người hay chỉ là tiếng ồn nền/im lặng.
+    - Trả về văn bản tiếng Việt nhận diện được (`transcript`). Nếu không nói gì -> `hasSpeech: False, transcript: ""`.
+    """
+    audio_bytes = await audio.read()
+    try:
+        samples, sr = engine._decode_audio_bytes(audio_bytes)
+        engine._extract_voiced_frames(samples, sr)
+    except ValueError as exc:
+        return JSONResponse(
+            content={
+                "ok": False,
+                "hasSpeech": False,
+                "transcript": "",
+                "detail": str(exc),
+            }
+        )
+
+    transcript = engine.transcribe_vietnamese(audio_bytes)
+    if not transcript:
+        return JSONResponse(
+            content={
+                "ok": False,
+                "hasSpeech": False,
+                "transcript": "",
+                "detail": "Chưa nhận diện được câu nói tiếng Việt rõ ràng. Vui lòng nói to và rõ hơn.",
+            }
+        )
+
+    return JSONResponse(
+        content={
+            "ok": True,
+            "hasSpeech": True,
+            "transcript": transcript,
+        }
+    )
+
+
 @app.post("/api/biometrics/enroll-voice")
 async def enroll_voice_from_phone(
     audio: UploadFile = File(...),
     userId: Optional[str] = Form(None),
+    transcript: Optional[str] = Form(None),
     passphrase: Optional[str] = Form(None),
 ) -> JSONResponse:
+    """
+    Thu mẫu giọng nói từ điện thoại:
+    - Nhận file âm thanh `audio` và `transcript` đã xử lý (hoặc tự động nhận diện từ `audio`).
+    - Tự động lưu `transcript` người dùng vừa nói làm `voicePassphrase` mà Admin không cần nhập trước.
+    """
     enroll = fb_get("SmartLock/Control/Biometric_Enroll") or {}
     target_user_id = (userId or str(enroll.get("userId", ""))).strip()
     target_user_name = str(enroll.get("userName", "")).strip()
     enroll_target = str(enroll.get("target", "voice")).strip()
-    expected_phrase = normalize_vietnamese_phrase(
-        passphrase or str(enroll.get("expectedPassphrase", ""))
-    )
 
     if not target_user_id:
-        raise HTTPException(status_code=400, detail="Không xác định được thành viên cần thu giọng nói.")
+        raise HTTPException(
+            status_code=400, detail="Không xác định được thành viên cần thu giọng nói."
+        )
 
     audio_bytes = await audio.read()
     try:
@@ -257,26 +309,27 @@ async def enroll_voice_from_phone(
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"ok": False, "detail": str(exc)})
 
-    spoken_text = engine.transcribe_vietnamese(audio_bytes)
+    # Lấy transcript đã xử lý từ điện thoại gửi lên hoặc trích xuất trực tiếp bằng ASR
+    spoken_text = normalize_vietnamese_phrase(transcript or "")
+    if not spoken_text:
+        spoken_text = engine.transcribe_vietnamese(audio_bytes)
 
-    if expected_phrase and spoken_text:
-        sim = compute_phrase_similarity(spoken_text, expected_phrase)
-        if sim < 0.65:
-            msg = f"Câu vừa đọc (\"{spoken_text}\") chưa khớp với câu mật khẩu yêu cầu (\"{expected_phrase}\"). Vui lòng đọc lại!"
-            if enroll.get("active"):
-                fb_patch(
-                    "SmartLock/Control/Biometric_Enroll",
-                    {"message": msg, "updatedAt": int(time.time() * 1000)},
-                )
-            return JSONResponse(status_code=400, content={"ok": False, "detail": msg})
-        final_passphrase = expected_phrase
-    else:
-        final_passphrase = (
-            expected_phrase
-            or spoken_text
-            or normalize_vietnamese_phrase(f"mở cửa cho {target_user_name or target_user_id}")
+    # Bắt buộc phải nhận diện được câu nói thực tế (tối thiểu 2 từ), tuyệt đối không tự bịa câu mặc định khi im lặng!
+    words = spoken_text.split() if spoken_text else []
+    if not spoken_text or len(words) < 2:
+        msg = (
+            f"Câu vừa nhận diện (\"{spoken_text}\") quá ngắn. Vui lòng nói một câu mật khẩu từ 2 từ trở lên!"
+            if spoken_text
+            else "Chưa nhận diện được câu nói rõ ràng. Vui lòng nói một câu mật khẩu (VD: \"mở cửa cho tôi\") vào mic điện thoại!"
         )
+        if enroll.get("active"):
+            fb_patch(
+                "SmartLock/Control/Biometric_Enroll",
+                {"message": msg, "updatedAt": int(time.time() * 1000)},
+            )
+        return JSONResponse(status_code=400, content={"ok": False, "detail": msg})
 
+    final_passphrase = spoken_text
     now_ms = int(time.time() * 1000)
 
     fb_patch(
@@ -303,7 +356,7 @@ async def enroll_voice_from_phone(
                 {
                     "step": "waiting_face",
                     "expectedPassphrase": final_passphrase,
-                    "message": f"Đã thu giọng nói (\"{final_passphrase}\")! Đang mở Camera sau HD để chụp khuôn mặt...",
+                    "message": f"Đã lưu giọng nói & câu mật khẩu: \"{final_passphrase}\"! Đang mở Camera sau HD để chụp khuôn mặt...",
                     "updatedAt": now_ms,
                 },
             )
@@ -315,7 +368,7 @@ async def enroll_voice_from_phone(
                     "active": False,
                     "step": "completed",
                     "expectedPassphrase": final_passphrase,
-                    "message": f"Đã đăng ký giọng nói & câu mật khẩu cho {target_user_name} thành công!",
+                    "message": f"Đã đăng ký giọng nói với câu mật khẩu \"{final_passphrase}\" cho {target_user_name} thành công!",
                     "updatedAt": now_ms,
                 },
             )
@@ -323,12 +376,19 @@ async def enroll_voice_from_phone(
     else:
         next_step = "completed"
 
+    logger.info(
+        "Enrolled voice for user=%s (%s) with transcript passphrase='%s'",
+        target_user_id,
+        target_user_name,
+        final_passphrase,
+    )
+
     return JSONResponse(
         content={
             "ok": True,
             "userId": target_user_id,
             "voicePassphrase": final_passphrase,
-            "spokenText": spoken_text or final_passphrase,
+            "spokenText": final_passphrase,
             "embeddingDim": len(voice_emb),
             "nextStep": next_step,
         }
@@ -345,7 +405,9 @@ async def enroll_face_from_phone(
     target_user_name = str(enroll.get("userName", "")).strip()
 
     if not target_user_id:
-        raise HTTPException(status_code=400, detail="Không xác định được thành viên cần chụp khuôn mặt.")
+        raise HTTPException(
+            status_code=400, detail="Không xác định được thành viên cần chụp khuôn mặt."
+        )
 
     image_bytes = await image.read()
     try:
@@ -394,7 +456,18 @@ async def enroll_face_from_phone(
 
 
 @app.post("/api/biometrics/verify-voice")
-async def verify_voice_step1(audio: UploadFile = File(...)) -> JSONResponse:
+async def verify_voice_step1(
+    audio: UploadFile = File(...),
+    transcript: Optional[str] = Form(None),
+) -> JSONResponse:
+    """
+    Bước 1 mở khóa bằng Giọng nói:
+    - BẮT BUỘC phải có `spoken_text` (Transcript nhận diện được từ tiếng nói thực tế).
+    - Nếu người dùng không nói gì hoặc không nhận diện được chữ (`spoken_text == ""`),
+      từ chối ngay lập tức (`matched: False, silence: True`), TUYỆT ĐỐI không tự gán câu mật khẩu đã lưu!
+    - Khi có `spoken_text`, kiểm tra đồng thời độ khớp câu nói (`phraseScore >= 0.76`)
+      VÀ độ khớp đặc trưng giọng nói 192 chiều (`voiceScore >= 0.70`).
+    """
     control = fb_get("SmartLock/Control") or {}
     if bool(control.get("Lockdown", False)):
         return JSONResponse(
@@ -415,18 +488,40 @@ async def verify_voice_step1(audio: UploadFile = File(...)) -> JSONResponse:
     try:
         probe_voice = engine.extract_voice_embedding(audio_bytes)
     except ValueError as exc:
-        return JSONResponse(content={"matched": False, "reason": str(exc)})
+        return JSONResponse(
+            content={
+                "matched": False,
+                "silence": True,
+                "spokenText": "",
+                "reason": str(exc),
+            }
+        )
 
-    spoken_text = engine.transcribe_vietnamese(audio_bytes)
+    spoken_text = normalize_vietnamese_phrase(transcript or "")
+    if not spoken_text:
+        spoken_text = engine.transcribe_vietnamese(audio_bytes)
+
+    # FIX TRIỆT ĐỂ: Nếu không nói gì hoặc không nhận diện được câu nói -> Dừng ngay lập tức!
+    if not spoken_text:
+        return JSONResponse(
+            content={
+                "matched": False,
+                "silence": True,
+                "voiceScore": 0.0,
+                "phraseScore": 0.0,
+                "spokenText": "",
+                "reason": "Chưa nhận diện được câu nói rõ ràng. Hãy nói câu mật khẩu đã đăng ký vào điện thoại.",
+            }
+        )
 
     users_map = fb_get("SmartLock/Users") or {}
     bio_map = fb_get("SmartLock/Biometrics") or {}
 
     best_user_id: Optional[str] = None
     best_user_name: str = ""
-    best_voice_score: float = -1.0
+    best_voice_score: float = 0.0
     best_phrase_score: float = 0.0
-    best_expected_phrase: str = ""
+    best_combined_score: float = -1.0
 
     for uid, udata in users_map.items():
         if not isinstance(udata, dict) or udata.get("status") == "disabled":
@@ -438,53 +533,61 @@ async def verify_voice_step1(audio: UploadFile = File(...)) -> JSONResponse:
         if not isinstance(saved_voice, list) or len(saved_voice) == 0:
             continue
 
-        v_score = cosine_similarity(probe_voice, saved_voice)
         expected_phrase = normalize_vietnamese_phrase(
             str(bdata.get("voicePassphrase") or udata.get("voicePassphrase") or "")
         )
+        if not expected_phrase:
+            continue
 
-        if expected_phrase:
-            if spoken_text:
-                p_score = compute_phrase_similarity(spoken_text, expected_phrase)
-            else:
-                p_score = 0.80 if v_score >= 0.82 else 0.0
-        else:
-            p_score = 1.0
+        v_score = max(0.0, cosine_similarity(probe_voice, saved_voice))
+        p_score = compute_phrase_similarity(spoken_text, expected_phrase)
+        combined = 0.55 * p_score + 0.45 * v_score
 
-        if v_score > best_voice_score:
+        if combined > best_combined_score:
+            best_combined_score = combined
             best_voice_score = v_score
             best_phrase_score = p_score
             best_user_id = uid
             best_user_name = str(udata.get("name", uid))
-            best_expected_phrase = expected_phrase
 
     if (
         best_user_id is None
-        or best_voice_score < engine.VOICE_THRESHOLD
         or best_phrase_score < engine.PASSPHRASE_THRESHOLD
+        or best_voice_score < engine.VOICE_THRESHOLD
     ):
         reason_parts = []
-        if best_voice_score < engine.VOICE_THRESHOLD:
-            reason_parts.append(f"Giọng nói chưa khớp ({max(0.0, best_voice_score)*100:.0f}%)")
-        elif best_phrase_score < engine.PASSPHRASE_THRESHOLD:
+        if best_phrase_score < engine.PASSPHRASE_THRESHOLD:
             reason_parts.append(
-                f"Câu mật khẩu chưa đúng (Nghe được: \"{spoken_text or '...'}\")"
+                f"Câu nói \"{spoken_text}\" không khớp với mật khẩu đã lưu ({best_phrase_score*100:.0f}%)"
+            )
+        if best_voice_score < engine.VOICE_THRESHOLD:
+            reason_parts.append(
+                f"Giọng nói chưa khớp ({best_voice_score*100:.0f}%)"
             )
         return JSONResponse(
             content={
                 "matched": False,
-                "voiceScore": round(max(0.0, best_voice_score), 3),
+                "silence": False,
+                "voiceScore": round(best_voice_score, 3),
                 "phraseScore": round(best_phrase_score, 3),
                 "spokenText": spoken_text,
-                "reason": " • ".join(reason_parts) or "Giọng nói hoặc câu mật khẩu không khớp.",
+                "reason": " • ".join(reason_parts)
+                or "Giọng nói hoặc câu mật khẩu không khớp.",
             }
         )
 
     user_bio = bio_map.get(best_user_id) or {}
-    if not isinstance(user_bio.get("faceEmbedding"), list) or len(user_bio["faceEmbedding"]) == 0:
+    if (
+        not isinstance(user_bio.get("faceEmbedding"), list)
+        or len(user_bio["faceEmbedding"]) == 0
+    ):
         return JSONResponse(
             content={
                 "matched": False,
+                "silence": False,
+                "voiceScore": round(best_voice_score, 3),
+                "phraseScore": round(best_phrase_score, 3),
+                "spokenText": spoken_text,
                 "reason": f"Thành viên {best_user_name} chưa đăng ký dữ liệu khuôn mặt để xác thực Bước 2.",
             }
         )
@@ -495,9 +598,18 @@ async def verify_voice_step1(audio: UploadFile = File(...)) -> JSONResponse:
         "userName": best_user_name,
         "voiceScore": round(best_voice_score, 3),
         "phraseScore": round(best_phrase_score, 3),
-        "spokenText": spoken_text or best_expected_phrase,
+        "spokenText": spoken_text,
         "expiresAt": time.time() + SESSION_TTL_SECONDS,
     }
+
+    logger.info(
+        "Voice Step 1 MATCHED user=%s (%s) spoken='%s' voice=%.3f phrase=%.3f",
+        best_user_id,
+        best_user_name,
+        spoken_text,
+        best_voice_score,
+        best_phrase_score,
+    )
 
     return JSONResponse(
         content={
@@ -507,7 +619,7 @@ async def verify_voice_step1(audio: UploadFile = File(...)) -> JSONResponse:
             "userName": best_user_name,
             "voiceScore": round(best_voice_score, 3),
             "phraseScore": round(best_phrase_score, 3),
-            "spokenText": spoken_text or best_expected_phrase,
+            "spokenText": spoken_text,
             "expiresInSeconds": int(SESSION_TTL_SECONDS),
         }
     )

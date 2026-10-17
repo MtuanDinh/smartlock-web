@@ -27,7 +27,7 @@ export interface BiometricEnrollModalProps {
   onStartEnroll: (
     user: User,
     target: BiometricEnrollTarget,
-    expectedPassphrase: string
+    expectedPassphrase?: string
   ) => Promise<void>;
   onCancelEnroll: () => Promise<void>;
   onClearBiometrics: (user: User, target: BiometricEnrollTarget) => Promise<void>;
@@ -44,19 +44,10 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
   onClearBiometrics,
 }) => {
   const { mockControls } = useSystemStatus();
-  const [passphrase, setPassphrase] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(60);
 
   const isEnrollingThisUser =
     enrollState.active && Boolean(user && enrollState.userId === user.id);
-
-  useEffect(() => {
-    if (open && user) {
-      setPassphrase(
-        user.voicePassphrase || `mở cửa cho ${user.name.toLowerCase()}`
-      );
-    }
-  }, [open, user]);
 
   // Tự động đóng modal khi điện thoại thu mẫu hoàn tất
   useEffect(() => {
@@ -143,7 +134,7 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
       }
     >
       {isEnrollingThisUser ? (
-        /* GIAO DIỆN ĐANG ĐỢI ĐIỆN THOẠI THU GIỌNG NÓI / CHỤP CAM SAU HD */
+        /* GIAO DIỆN ĐỢI ĐIỆN THOẠI THU GIỌNG NÓI (AUTO TRANSCRIPT) / CHỤP CAM SAU HD */
         <div className="flex flex-col items-center text-center py-3 space-y-4">
           <p className="text-xs text-on-surface-variant">
             Đã phát lệnh thu mẫu xuống <strong>Trạm Điện Thoại (/kiosk)</strong> cho:{' '}
@@ -160,7 +151,7 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
               }`}
             >
               <Mic className="h-3.5 w-3.5" />
-              <span>1. Thu Giọng Nói</span>
+              <span>1. Thu Tiếng &amp; Transcript</span>
             </div>
             <div
               className={`rounded-xl py-2 px-3 border flex items-center justify-center gap-1.5 ${
@@ -187,21 +178,21 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <h4 className="text-base font-extrabold text-primary">
               {enrollState.step === 'waiting_voice'
-                ? 'Hãy đọc câu mật khẩu vào Mic điện thoại...'
+                ? 'Hãy nói một câu mật khẩu bất kỳ vào Mic điện thoại...'
                 : 'Hãy nhìn vào Camera sau (HD) của điện thoại...'}
             </h4>
             {enrollState.expectedPassphrase &&
-              enrollState.step === 'waiting_voice' && (
-                <p className="text-xs font-mono font-bold text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-1 inline-block">
-                  &ldquo;{enrollState.expectedPassphrase}&rdquo;
+              enrollState.step === 'waiting_face' && (
+                <p className="text-xs font-mono font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-1 inline-block">
+                  Transcript đã lưu: &ldquo;{enrollState.expectedPassphrase}&rdquo;
                 </p>
               )}
             <p className="text-xs text-on-surface-variant max-w-sm">
               {enrollState.message ||
-                'Điện thoại đang tự động thu âm (VAD) và chụp khuôn mặt bằng Camera sau độ phân giải cao.'}
+                'Điện thoại sẽ tự động thu tiếng, xử lý Transcript câu nói của người dùng và gửi lưu lên Server mà không cần nhập trước.'}
             </p>
           </div>
 
@@ -256,8 +247,8 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
               </div>
               <p className="text-[11px] text-on-surface-variant truncate">
                 {user.hasVoice && user.voicePassphrase
-                  ? `Câu lệnh: "${user.voicePassphrase}"`
-                  : 'Vector 192 chiều + Câu nói mật khẩu'}
+                  ? `Transcript đã lưu: "${user.voicePassphrase}"`
+                  : 'Tự động trích xuất vector 192-D & Transcript câu nói'}
               </p>
               <div className="flex items-center gap-1.5 pt-1">
                 <Button
@@ -265,9 +256,7 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
                   variant="secondary"
                   fullWidth
                   disabled={!isClientConnected}
-                  onClick={() =>
-                    void onStartEnroll(user, 'voice', passphrase)
-                  }
+                  onClick={() => void onStartEnroll(user, 'voice', '')}
                   className="text-xs"
                   leftIcon={<Mic className="h-3.5 w-3.5" />}
                 >
@@ -314,9 +303,7 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
                   variant="secondary"
                   fullWidth
                   disabled={!isClientConnected}
-                  onClick={() =>
-                    void onStartEnroll(user, 'face', passphrase)
-                  }
+                  onClick={() => void onStartEnroll(user, 'face', '')}
                   className="text-xs"
                   leftIcon={<Camera className="h-3.5 w-3.5" />}
                 >
@@ -337,24 +324,20 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
             </div>
           </div>
 
-          {/* Thiết lập câu nói mật khẩu cho Bước 1 */}
-          <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low/40 p-3.5 space-y-2">
-            <label
-              htmlFor="bio-passphrase-input"
-              className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant"
-            >
-              Câu nói mật khẩu (Dùng để đối chiếu ở Bước 1)
-            </label>
-            <input
-              id="bio-passphrase-input"
-              type="text"
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-              placeholder={`VD: mở cửa cho ${user.name.toLowerCase()}`}
-              className="min-h-[40px] w-full rounded-xl border border-outline-variant/50 bg-surface-container-lowest px-3.5 py-2 text-xs text-on-surface placeholder:text-outline focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
+          {/* Thông tin cơ chế Tự động nhận diện Transcript (Không cần nhập câu lệnh trước) */}
+          <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low/40 p-3.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                Cơ chế Tự động Nhận diện Câu nói (Auto Transcript)
+              </span>
+              {user.hasVoice && user.voicePassphrase && (
+                <span className="text-[11px] font-mono font-bold text-primary bg-primary/10 border border-primary/25 rounded-md px-2 py-0.5">
+                  &ldquo;{user.voicePassphrase}&rdquo;
+                </span>
+              )}
+            </div>
             <p className="text-[11px] text-outline leading-relaxed">
-              Khi mở khóa, hệ thống yêu cầu <strong>đúng giọng của {user.name}</strong> VÀ <strong>đọc đúng câu mật khẩu này</strong> thì mới bật Camera sau xác thực khuôn mặt.
+              Bạn <strong>không cần nhập câu lệnh trước</strong>. Khi thu âm trên điện thoại, người dùng chỉ cần nói một câu mật khẩu bất kỳ (tối thiểu 2 từ) &mdash; hệ thống sẽ tự động xử lý <strong>Transcript</strong> câu vừa nói và lưu kèm đặc trưng giọng nói 192 chiều lên Server.
             </p>
           </div>
 
@@ -364,11 +347,11 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
             size="lg"
             fullWidth
             disabled={!isClientConnected}
-            onClick={() => void onStartEnroll(user, 'both', passphrase)}
+            onClick={() => void onStartEnroll(user, 'both', '')}
             className="rounded-xl font-bold shadow-md shadow-blue-500/20"
             leftIcon={<Sparkles className="h-4 w-4" />}
           >
-            Thu Cả Giọng Nói &amp; Khuôn Mặt (Cam Sau HD) Trên Điện Thoại
+            Thu Cả Giọng Nói (Auto Transcript) &amp; Khuôn Mặt Trên Điện Thoại
           </Button>
         </div>
       )}

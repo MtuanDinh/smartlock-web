@@ -52,7 +52,6 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   const [enrollOnPhoneAfterAdd, setEnrollOnPhoneAfterAdd] = useState(false);
   const [enrollTarget, setEnrollTarget] =
     useState<BiometricEnrollTarget>('both');
-  const [rawPassphrase, setRawPassphrase] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,7 +60,6 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       setRawPin('');
       setEnrollOnPhoneAfterAdd(false);
       setEnrollTarget('both');
-      setRawPassphrase('');
       setFormError(null);
     }
   }, [open, mode, targetUser]);
@@ -95,9 +93,6 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       if (createdUserId) {
         onOpenChange(false);
         if (enrollOnPhoneAfterAdd && onTriggerBiometricAfterAdd) {
-          const phrase =
-            rawPassphrase.trim() ||
-            `mở cửa cho ${nameCheck.normalizedName.toLowerCase()}`;
           onTriggerBiometricAfterAdd(
             {
               id: createdUserId,
@@ -107,7 +102,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               status: 'active',
             },
             enrollTarget,
-            phrase
+            ''
           );
         }
       }
@@ -309,24 +304,9 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                   </div>
 
                   {enrollTarget !== 'face' && (
-                    <div>
-                      <label
-                        htmlFor="modal-user-passphrase"
-                        className="mb-1 block text-[11px] font-bold text-on-surface-variant"
-                      >
-                        Câu nói mật khẩu (Để người dùng đọc vào mic điện thoại)
-                      </label>
-                      <input
-                        id="modal-user-passphrase"
-                        type="text"
-                        value={rawPassphrase}
-                        onChange={(e) => setRawPassphrase(e.target.value)}
-                        placeholder={`Mặc định: mở cửa cho ${(
-                          nameCheck.normalizedName || 'nguyễn văn an'
-                        ).toLowerCase()}`}
-                        className="min-h-[38px] w-full rounded-xl border border-outline-variant/50 bg-surface-container-lowest px-3 py-1.5 text-xs text-on-surface placeholder:text-outline focus:border-primary focus:outline-none"
-                      />
-                    </div>
+                    <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                      <strong>Không cần nhập câu lệnh trước:</strong> Người dùng chỉ cần nói bất kỳ câu mật khẩu nào (tối thiểu 2 từ) vào mic điện thoại &mdash; hệ thống tự động xử lý Transcript và lưu lên Server.
+                    </p>
                   )}
                 </div>
               )}
