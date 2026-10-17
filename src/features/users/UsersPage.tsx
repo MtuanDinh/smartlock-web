@@ -746,7 +746,7 @@ export const UsersPage: React.FC = () => {
       {/* 3. 2 Practical Guidance Cards at Bottom */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 animate-stagger-3">
         {/* Card 1: Gán thẻ từ RFID */}
-        <div className="card-glass card-glass-interactive rounded-2xl p-5 shadow-sm">
+        <div className="card-glass card-glass-interactive kpi-glass-purple rounded-2xl p-5 shadow-sm">
           <div className="flex items-center gap-2.5 mb-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-tertiary-fixed/50 text-tertiary border border-tertiary/20">
               <Radio className="h-4 w-4" />
@@ -761,7 +761,7 @@ export const UsersPage: React.FC = () => {
         </div>
 
         {/* Card 2: Quy tắc mã PIN an toàn */}
-        <div className="card-glass card-glass-interactive rounded-2xl p-5 shadow-sm">
+        <div className="card-glass card-glass-interactive kpi-glass-blue rounded-2xl p-5 shadow-sm">
           <div className="flex items-center gap-2.5 mb-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-fixed/40 text-primary border border-primary/20">
               <ShieldCheck className="h-4 w-4" />

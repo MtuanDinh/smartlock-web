@@ -127,10 +127,10 @@ export const RecentActivity: React.FC = () => {
             description="Lịch sử đóng mở cửa và cảnh báo sẽ xuất hiện tại đây theo thời gian thực."
           />
         ) : (
-          <div key={filter} className="relative ml-4 animate-tab-switch">
-            {/* Glowing Gradient Track Line */}
+          <div key={filter} className="relative ml-5 animate-tab-switch">
+            {/* Glowing Gradient Track Line (Centered at x = 1px) */}
             <div
-              className="absolute left-0 top-3 bottom-3 w-0.5 bg-gradient-to-b from-primary/60 via-outline-variant/40 to-transparent"
+              className="pointer-events-none absolute left-0 top-4 bottom-4 w-0.5 bg-gradient-to-b from-primary/50 via-outline-variant/40 to-transparent"
               aria-hidden="true"
             />
             <ol className="space-y-4">
@@ -141,12 +141,15 @@ export const RecentActivity: React.FC = () => {
                     key={log.id}
                     className="relative ml-6 rounded-xl p-2 transition-colors hover:bg-surface-container-low/50"
                   >
-                    <span
-                      className={`absolute -left-[35px] top-2 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm ring-4 ring-surface-container-lowest backdrop-blur-sm ${
-                        iconCircleTone[meta.colorVariant]
-                      }`}
-                    >
-                      {renderLogIcon(meta.iconName)}
+                    {/* Opaque backing circle masks the vertical line completely, centered at left-0 (-39px from ml-6) */}
+                    <span className="absolute -left-[39px] top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-lowest ring-4 ring-surface-container-lowest">
+                      <span
+                        className={`flex h-full w-full items-center justify-center rounded-full border shadow-xs ${
+                          iconCircleTone[meta.colorVariant]
+                        }`}
+                      >
+                        {renderLogIcon(meta.iconName)}
+                      </span>
                     </span>
 
                     <div className="flex flex-wrap items-center justify-between gap-2">
