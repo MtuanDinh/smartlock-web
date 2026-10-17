@@ -148,7 +148,7 @@ export const LoginPage: React.FC = () => {
                       setEmail(e.target.value);
                       if (loginError) clearLoginError();
                     }}
-                    placeholder="admin@smartlock.local"
+                    placeholder="admin@example.com"
                     className="min-h-[46px] w-full rounded-xl border border-outline-variant/40 bg-surface-container-low pl-10 pr-4 py-2.5 text-sm text-on-surface placeholder:text-outline focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                   />
                 </div>
