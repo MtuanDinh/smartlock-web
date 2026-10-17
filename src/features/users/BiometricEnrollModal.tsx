@@ -166,7 +166,7 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
             <h4 className="text-base font-extrabold text-primary">
               {enrollState.step === 'waiting_voice'
                 ? 'Hãy nói một câu mật khẩu bất kỳ vào Mic điện thoại...'
-                : 'Hãy nhìn vào Camera sau (HD) của điện thoại...'}
+                : 'Có 10s căn chỉnh: Đặt mặt vào Khung Mô Hình trên Camera sau (HD)...'}
             </h4>
             {enrollState.expectedPassphrase &&
               enrollState.step === 'waiting_face' && (

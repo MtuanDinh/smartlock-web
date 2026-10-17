@@ -399,28 +399,162 @@ class BiometricEngine:
         return l2_normalize(emb_192)
 
     # =========================================================================
-    # XỬ LÝ ẢNH CAMERA SAU ĐỘ PHÂN GIẢI CAO & TRÍCH XUẤT KHUÔN MẶT 512-D
+    # XỬ LÝ ẢNH CAMERA SAU ĐỘ PHÂN GIẢI CAO & KIỂM TRA KHỚP KHUNG MÔ HÌNH KHUÔN MẶT
     # =========================================================================
+    def _validate_and_crop_face_in_guide(
+        self, img: Image.Image
+    ) -> Tuple[Image.Image, Dict[str, object]]:
+        """
+        Kiểm tra khuôn mặt người dùng có đặt đúng vào KHUNG MÔ HÌNH KHUÔN MẶT trung tâm trên camera hay không:
+        1. Phải phát hiện được khuôn mặt trực diện bằng OpenCV Cascade / MTCNN.
+        2. Tâm khuôn mặt (cx, cy) phải nằm trong vùng khung mô hình bầu dục trung tâm (0.28..0.72, 0.22..0.78).
+        3. Kích thước khuôn mặt phải vừa vặn với mô hình (chiếm 22% -> 85% khung hình, không quá xa/quá sát).
+        4. Đảm bảo độ sáng (42..238) và độ sắc nét chống rung mờ (Laplacian variance >= 18).
+        """
+        width, height = img.size
+        if width < 160 or height < 160:
+            raise ValueError(
+                "Ảnh chụp quá nhỏ. Vui lòng giữ điện thoại ổn định để chụp rõ khuôn mặt."
+            )
+
+        rgb_np = np.asarray(img, dtype=np.uint8)
+        import cv2  # type: ignore
+
+        gray_full = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2GRAY)
+        gray_eq = cv2.equalizeHist(gray_full)
+        cascade_path = os.path.join(
+            cv2.data.haarcascades, "haarcascade_frontalface_default.xml"
+        )
+        detector = cv2.CascadeClassifier(cascade_path)
+        min_dim = max(56, int(min(width, height) * 0.15))
+        faces = detector.detectMultiScale(
+            gray_eq,
+            scaleFactor=1.11,
+            minNeighbors=5,
+            minSize=(min_dim, min_dim),
+        )
+        if len(faces) == 0:
+            alt_path = os.path.join(
+                cv2.data.haarcascades, "haarcascade_frontalface_alt2.xml"
+            )
+            alt_detector = cv2.CascadeClassifier(alt_path)
+            faces = alt_detector.detectMultiScale(
+                gray_eq,
+                scaleFactor=1.11,
+                minNeighbors=4,
+                minSize=(min_dim, min_dim),
+            )
+
+        if len(faces) == 0:
+            raise ValueError(
+                "Chưa đặt khuôn mặt vào khung mô hình. Vui lòng đặt khuôn mặt thẳng vào khung bầu dục trên màn hình."
+            )
+
+        # Chọn khuôn mặt lớn nhất
+        x, y, w_box, h_box = [
+            int(v) for v in max(faces, key=lambda b: int(b[2]) * int(b[3]))
+        ]
+        cx = (x + w_box * 0.5) / float(width)
+        cy = (y + h_box * 0.5) / float(height)
+        size_ratio = max(w_box, h_box) / float(min(width, height))
+
+        # 1. Kiểm tra căn tâm trong khung mô hình khuôn mặt
+        if cx < 0.28:
+            raise ValueError(
+                "Khuôn mặt đang lệch sang TRÁI khung mô hình. Hãy di chuyển khuôn mặt vào chính giữa khung."
+            )
+        if cx > 0.72:
+            raise ValueError(
+                "Khuôn mặt đang lệch sang PHẢI khung mô hình. Hãy di chuyển khuôn mặt vào chính giữa khung."
+            )
+        if cy < 0.22:
+            raise ValueError(
+                "Khuôn mặt đang ở QUÁ CAO so với khung mô hình. Hãy hạ nhẹ góc máy hoặc khuôn mặt vào tâm khung."
+            )
+        if cy > 0.78:
+            raise ValueError(
+                "Khuôn mặt đang ở QUÁ THẤP so với khung mô hình. Hãy nâng khuôn mặt vào đúng tâm khung bầu dục."
+            )
+
+        # 2. Kiểm tra tỷ lệ kích thước khuôn mặt so với mô hình
+        if size_ratio < 0.22:
+            raise ValueError(
+                "Khuôn mặt quá nhỏ so với khung mô hình. Hãy đưa điện thoại lại gần khuôn mặt hơn (cách 25–35 cm)."
+            )
+        if size_ratio > 0.85:
+            raise ValueError(
+                "Khuôn mặt quá sát camera. Hãy đưa điện thoại ra xa một chút để khuôn mặt nằm gọn trong khung mô hình."
+            )
+
+        # 3. Kiểm tra độ sáng & độ nét (chống rung nhòe)
+        gray_face = gray_full[max(0, y) : min(height, y + h_box), max(0, x) : min(width, x + w_box)]
+        mean_luma = float(np.mean(gray_face))
+        if mean_luma < 42.0:
+            raise ValueError(
+                "Khuôn mặt bị thiếu sáng. Vui lòng đứng nơi đủ sáng và đặt mặt vào khung mô hình."
+            )
+        if mean_luma > 238.0:
+            raise ValueError(
+                "Khuôn mặt bị lóa sáng mạnh. Vui lòng tránh ngược sáng để khuôn mặt rõ nét."
+            )
+
+        lap_var = float(
+            cv2.Laplacian(cv2.resize(gray_face, (128, 128)), cv2.CV_64F).var()
+        )
+        if lap_var < 18.0:
+            raise ValueError(
+                "Khuôn mặt đang bị mờ do rung tay. Vui lòng giữ yên điện thoại trong khung mô hình."
+            )
+
+        pad_x = int(w_box * 0.10)
+        pad_y = int(h_box * 0.10)
+        x1 = max(0, x - pad_x)
+        y1 = max(0, y - pad_y)
+        x2 = min(width, x + w_box + pad_x)
+        y2 = min(height, y + h_box + pad_y)
+        face_crop_pil = img.crop((x1, y1, x2, y2)).resize(
+            (64, 64), Image.Resampling.BICUBIC
+        )
+
+        meta: Dict[str, object] = {
+            "width": width,
+            "height": height,
+            "aligned": True,
+            "cx": round(cx, 3),
+            "cy": round(cy, 3),
+            "sizeRatio": round(size_ratio, 3),
+            "sharpness": round(lap_var, 1),
+        }
+        return face_crop_pil, meta
+
+    def check_face_guide(self, image_bytes: bytes) -> Dict[str, object]:
+        """Kiểm tra nhanh khung hình hiện tại đã khớp mô hình khuôn mặt chuẩn hay chưa."""
+        img = Image.open(io.BytesIO(image_bytes))
+        img = ImageOps.exif_transpose(img).convert("RGB")
+        _, meta = self._validate_and_crop_face_in_guide(img)
+        return meta
+
     def extract_face_embedding(self, image_bytes: bytes) -> Tuple[List[float], Dict[str, int]]:
         """
         Nhận ảnh chụp từ Camera sau của điện thoại (độ phân giải cao),
-        chuẩn hóa hướng EXIF, phát hiện khuôn mặt thực tế (MTCNN hoặc OpenCV Cascade)
-        và trích xuất vector 512 chiều (L2-normalized).
+        bắt buộc khuôn mặt phải nằm đúng trong khung mô hình chuẩn,
+        sau đó trích xuất vector 512 chiều (L2-normalized).
         """
         img = Image.open(io.BytesIO(image_bytes))
         img = ImageOps.exif_transpose(img).convert("RGB")
         width, height = img.size
 
-        if width < 160 or height < 160:
-            raise ValueError("Ảnh chụp quá nhỏ. Vui lòng giữ điện thoại ổn định để chụp rõ khuôn mặt.")
+        # Bước 1: Kiểm tra khuôn mặt đã đặt đúng vào khung mô hình chuẩn hay chưa
+        face_crop_pil, _ = self._validate_and_crop_face_in_guide(img)
 
+        # Bước 2: Trích xuất đặc trưng 512 chiều
         if self.facenet_ready and self.mtcnn is not None and self.facenet is not None:
             import torch  # type: ignore
 
             face_tensor = self.mtcnn(img)
             if face_tensor is None:
                 raise ValueError(
-                    "Không tìm thấy khuôn mặt rõ nét trong khung hình camera sau. Vui lòng nhìn thẳng vào camera sau của điện thoại."
+                    "Không tìm thấy khuôn mặt rõ nét trong khung mô hình. Vui lòng nhìn thẳng vào camera sau."
                 )
             if face_tensor.ndim == 3:
                 face_tensor = face_tensor.unsqueeze(0)
@@ -428,67 +562,11 @@ class BiometricEngine:
                 emb = self.facenet(face_tensor).squeeze().cpu().numpy()
             return l2_normalize(emb), {"width": width, "height": height}
 
-        # Sử dụng OpenCV Frontal Face Detection để bắt buộc phải có khuôn mặt người thật trong khung hình
-        rgb_np = np.asarray(img, dtype=np.uint8)
-        face_crop_pil: Image.Image | None = None
-        try:
-            import cv2  # type: ignore
-
-            gray_full = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2GRAY)
-            gray_eq = cv2.equalizeHist(gray_full)
-            cascade_path = os.path.join(
-                cv2.data.haarcascades, "haarcascade_frontalface_default.xml"
-            )
-            detector = cv2.CascadeClassifier(cascade_path)
-            min_dim = max(60, int(min(width, height) * 0.16))
-            faces = detector.detectMultiScale(
-                gray_eq,
-                scaleFactor=1.12,
-                minNeighbors=5,
-                minSize=(min_dim, min_dim),
-            )
-            if len(faces) == 0:
-                alt_path = os.path.join(
-                    cv2.data.haarcascades, "haarcascade_frontalface_alt2.xml"
-                )
-                alt_detector = cv2.CascadeClassifier(alt_path)
-                faces = alt_detector.detectMultiScale(
-                    gray_eq,
-                    scaleFactor=1.12,
-                    minNeighbors=4,
-                    minSize=(min_dim, min_dim),
-                )
-
-            if len(faces) == 0:
-                raise ValueError(
-                    "Chưa phát hiện khuôn mặt trong khung hình. Vui lòng hướng Camera sau thẳng vào khuôn mặt nơi đủ sáng."
-                )
-
-            # Chọn khuôn mặt lớn nhất trong khung hình
-            x, y, w_box, h_box = max(faces, key=lambda b: int(b[2]) * int(b[3]))
-            pad_x = int(w_box * 0.12)
-            pad_y = int(h_box * 0.12)
-            x1 = max(0, int(x) - pad_x)
-            y1 = max(0, int(y) - pad_y)
-            x2 = min(width, int(x + w_box) + pad_x)
-            y2 = min(height, int(y + h_box) + pad_y)
-            face_crop_pil = img.crop((x1, y1, x2, y2)).resize(
-                (64, 64), Image.Resampling.BICUBIC
-            )
-        except ValueError:
-            raise
-        except Exception:
-            min_side = min(width, height)
-            crop_size = int(min_side * 0.65)
-            left = (width - crop_size) // 2
-            top = (height - crop_size) // 2
-            face_crop_pil = img.crop((left, top, left + crop_size, top + crop_size)).resize(
-                (64, 64), Image.Resampling.BICUBIC
-            )
-
         arr = np.asarray(face_crop_pil, dtype=np.float32) / 255.0
         if float(np.std(arr)) < 0.05:
-            raise ValueError("Khung hình camera quá tối hoặc bị mờ. Vui lòng hướng camera sau vào khuôn mặt nơi đủ sáng.")
+            raise ValueError(
+                "Khung hình khuôn mặt thiếu độ tương phản. Vui lòng hướng camera sau vào khuôn mặt nơi đủ sáng."
+            )
 
         gray = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
         gray = (gray - float(np.mean(gray))) / (float(np.std(gray)) + 1e-5)

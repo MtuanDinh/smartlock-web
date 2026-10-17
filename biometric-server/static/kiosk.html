@@ -171,9 +171,9 @@
         </p>
       </div>
 
-      <!-- Stage Visual: High-Resolution Rear Camera Face Scanner -->
+      <!-- Stage Visual: High-Resolution Rear Camera Face Scanner with Biometric Face Model Guide -->
       <div id="camera-visual" class="hidden flex-col items-center justify-center space-y-2">
-        <div class="relative w-full aspect-[4/3] max-h-72 rounded-2xl overflow-hidden border-2 border-sky-400/60 bg-black shadow-xl shadow-sky-500/20">
+        <div id="camera-frame-box" class="relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-sky-400/70 bg-black shadow-xl shadow-sky-500/20 transition-colors duration-300">
           <video
             id="kiosk-video"
             autoplay
@@ -181,8 +181,79 @@
             muted
             class="w-full h-full object-cover"
           ></video>
+
+          <!-- Biometric Face Silhouette Guide Overlay (Mô hình định vị khuôn mặt chuẩn) -->
+          <svg
+            id="face-guide-svg"
+            viewBox="0 0 200 150"
+            preserveAspectRatio="xMidYMid slice"
+            class="pointer-events-none absolute inset-0 w-full h-full"
+          >
+            <defs>
+              <mask id="face-oval-cutout">
+                <rect x="0" y="0" width="200" height="150" fill="white" />
+                <ellipse cx="100" cy="70" rx="44" ry="52" fill="black" />
+              </mask>
+            </defs>
+            <!-- Lớp phủ tối xung quanh để làm nổi bật khung mô hình khuôn mặt ở giữa -->
+            <rect
+              x="0"
+              y="0"
+              width="200"
+              height="150"
+              fill="rgba(2, 6, 23, 0.56)"
+              mask="url(#face-oval-cutout)"
+            />
+
+            <!-- 4 Góc định vị khung quét -->
+            <g id="face-guide-brackets" stroke="#38bdf8" stroke-width="2.2" fill="none" stroke-linecap="round">
+              <path d="M44 22 L44 12 L56 12" />
+              <path d="M156 22 L156 12 L144 12" />
+              <path d="M44 122 L44 132 L56 132" />
+              <path d="M156 122 L156 132 L144 132" />
+            </g>
+
+            <!-- Đường viền Mô hình Khuôn mặt + Tai + Vai -->
+            <g id="face-guide-contour" stroke="#38bdf8" stroke-width="2" fill="none">
+              <ellipse
+                cx="100"
+                cy="70"
+                rx="44"
+                ry="52"
+                stroke-dasharray="5 3"
+              />
+              <!-- Tai trái & Tai phải -->
+              <path d="M56 60 C50 60, 50 78, 56 78" stroke-width="1.6" opacity="0.8" />
+              <path d="M144 60 C150 60, 150 78, 144 78" stroke-width="1.6" opacity="0.8" />
+              <!-- Đường trục ngang 2 mắt & sống mũi định tâm -->
+              <line x1="68" y1="62" x2="132" y2="62" stroke-width="1" stroke-dasharray="2 3" opacity="0.65" />
+              <circle cx="83" cy="62" r="2.2" opacity="0.7" />
+              <circle cx="117" cy="62" r="2.2" opacity="0.7" />
+              <line x1="100" y1="54" x2="100" y2="82" stroke-width="1" stroke-dasharray="2 3" opacity="0.65" />
+              <path d="M90 95 Q100 101 110 95" stroke-width="1.3" opacity="0.65" />
+              <!-- Đường cong vai gợi ý khoảng cách -->
+              <path d="M42 146 C56 131, 76 126, 100 126 C124 126, 144 131, 158 146" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.55" />
+            </g>
+          </svg>
+
           <div class="scan-laser"></div>
-          <div class="pointer-events-none absolute inset-5 border-2 border-dashed border-sky-300/45 rounded-2xl"></div>
+
+          <!-- Top Badge: Trạng thái khớp khung mô hình & Đếm ngược 10s -->
+          <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 pointer-events-none">
+            <span
+              id="face-align-badge"
+              class="px-2.5 py-1 rounded-lg bg-slate-950/85 border border-sky-400/50 text-[10px] font-extrabold text-sky-300 backdrop-blur-sm truncate"
+            >
+              🎯 ĐẶT MẶT VÀO KHUNG MÔ HÌNH
+            </span>
+            <span
+              id="face-prep-timer"
+              class="hidden px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0"
+            >
+              ⏳ 10s
+            </span>
+          </div>
+
           <div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-sm text-[10px] font-mono text-sky-300">
             <span id="cam-res-label">CAM SAU HD • AUTO-FOCUS</span>
             <span id="cam-countdown">30s</span>
@@ -245,6 +316,11 @@
     const stepPillFace = document.getElementById('step-pill-face');
     const voiceVisual = document.getElementById('voice-visual');
     const cameraVisual = document.getElementById('camera-visual');
+    const cameraFrameBox = document.getElementById('camera-frame-box');
+    const faceGuideBrackets = document.getElementById('face-guide-brackets');
+    const faceGuideContour = document.getElementById('face-guide-contour');
+    const faceAlignBadge = document.getElementById('face-align-badge');
+    const facePrepTimer = document.getElementById('face-prep-timer');
     const vadCore = document.getElementById('vad-core');
     const vadIcon = document.getElementById('vad-icon');
     const vadStateLabel = document.getElementById('vad-state-label');
@@ -295,6 +371,10 @@
     let isPollingState = false;
     let isTtsSpeaking = false;
     let lastFaceScanAt = 0;
+
+    // Độ trễ 10 giây khi thêm/cập nhật khuôn mặt để người dùng kịp đặt mặt vào khung mô hình
+    const FACE_ENROLL_PREP_MS = 10000;
+    let faceEnrollPrepStartAt = 0;
 
     // Tham số VAD chống nhiễu nền & chống tự kích hoạt khi im lặng
     const TARGET_SAMPLE_RATE = 16000;
@@ -490,12 +570,71 @@
       }
     });
 
+    function updateFaceGuideVisual(mode, customBadgeText) {
+      if (!faceGuideBrackets || !faceGuideContour || !faceAlignBadge || !cameraFrameBox) return;
+      if (mode === 'aligned') {
+        faceGuideBrackets.setAttribute('stroke', '#10b981');
+        faceGuideContour.setAttribute('stroke', '#10b981');
+        cameraFrameBox.className =
+          'relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-emerald-400 bg-black shadow-xl shadow-emerald-500/25 transition-colors duration-300';
+        faceAlignBadge.className =
+          'px-2.5 py-1 rounded-lg bg-emerald-950/90 border border-emerald-400/70 text-[10px] font-extrabold text-emerald-300 backdrop-blur-sm truncate';
+        faceAlignBadge.textContent =
+          customBadgeText || '✅ ĐÃ KHỚP KHUNG MÔ HÌNH CHUẨN';
+      } else if (mode === 'warning') {
+        faceGuideBrackets.setAttribute('stroke', '#f59e0b');
+        faceGuideContour.setAttribute('stroke', '#f59e0b');
+        cameraFrameBox.className =
+          'relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-amber-400/80 bg-black shadow-xl shadow-amber-500/20 transition-colors duration-300';
+        faceAlignBadge.className =
+          'px-2.5 py-1 rounded-lg bg-amber-950/90 border border-amber-400/60 text-[10px] font-extrabold text-amber-300 backdrop-blur-sm truncate';
+        faceAlignBadge.textContent =
+          customBadgeText || '⚠️ ĐẶT MẶT VÀO GIỮA KHUNG BẦU DỤC';
+      } else {
+        faceGuideBrackets.setAttribute('stroke', '#38bdf8');
+        faceGuideContour.setAttribute('stroke', '#38bdf8');
+        cameraFrameBox.className =
+          'relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-sky-400/70 bg-black shadow-xl shadow-sky-500/20 transition-colors duration-300';
+        faceAlignBadge.className =
+          'px-2.5 py-1 rounded-lg bg-slate-950/85 border border-sky-400/50 text-[10px] font-extrabold text-sky-300 backdrop-blur-sm truncate';
+        faceAlignBadge.textContent =
+          customBadgeText || '🎯 ĐẶT MẶT VÀO KHUNG MÔ HÌNH';
+      }
+    }
+
+    function updateEnrollPrepTimerBadge() {
+      if (
+        !kioskStarted ||
+        currentServerMode !== 'enroll' ||
+        !enrollInfo.active ||
+        enrollInfo.step !== 'waiting_face'
+      ) {
+        facePrepTimer.classList.add('hidden');
+        return;
+      }
+      facePrepTimer.classList.remove('hidden');
+      const elapsed = Date.now() - faceEnrollPrepStartAt;
+      const remSec = Math.max(0, Math.ceil((FACE_ENROLL_PREP_MS - elapsed) / 1000));
+      if (remSec > 0) {
+        facePrepTimer.className =
+          'px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
+        facePrepTimer.textContent = `⏳ CĂN CHỈNH: ${remSec}s`;
+        camCountdown.textContent = `CHỤP SAU ${remSec}s`;
+      } else {
+        facePrepTimer.className =
+          'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
+        facePrepTimer.textContent = '📸 ĐANG CHỤP CHUẨN';
+        camCountdown.textContent = 'AUTO CAPTURE';
+      }
+    }
+
     async function setVisualPhase(phase) {
       resetVadBuffer();
       if (phase === 'voice') {
         voiceVisual.classList.remove('hidden');
         cameraVisual.classList.add('hidden');
         cameraVisual.classList.remove('flex');
+        facePrepTimer.classList.add('hidden');
         stepPillVoice.className =
           'rounded-xl py-2 px-3 border border-blue-400/50 bg-blue-500/20 text-blue-200 flex items-center justify-center gap-1.5';
         stepPillFace.className =
@@ -504,6 +643,7 @@
         voiceVisual.classList.add('hidden');
         cameraVisual.classList.remove('hidden');
         cameraVisual.classList.add('flex');
+        updateFaceGuideVisual('scanning');
         stepPillVoice.className =
           'rounded-xl py-2 px-3 border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 flex items-center justify-center gap-1.5';
         stepPillFace.className =
@@ -555,7 +695,6 @@
               transData.detail ||
               'Hãy nói rõ một câu mật khẩu bất kỳ (tối thiểu 2 từ) vào mic điện thoại.';
           } else {
-            // Ở chế độ trực mở khóa tự động: giữ im lặng ở Bước 1, không báo lỗi giả và không chuyển sang Bước 2
             statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
             statusDesc.textContent =
               'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
@@ -596,13 +735,17 @@
             teleTranscript.textContent = `"${data.voicePassphrase}" (ĐÃ LƯU)`;
             teleScores.textContent = `SpeechBrain: 192-D OK`;
             if (data.nextStep === 'waiting_face') {
-              statusTitle.textContent =
-                `Đã lưu câu lệnh "${data.voicePassphrase}"!`;
-              statusDesc.textContent = `Chuyển sang Bước 2: Mời ${enrollInfo.userName} nhìn vào Camera sau (HD).`;
-              speakPrompt(
-                `Đã lưu câu lệnh ${data.voicePassphrase}. Mời ${enrollInfo.userName} nhìn vào camera sau của điện thoại.`
-              );
+              // Bắt đầu đếm ngược 10 giây để người dùng đặt khuôn mặt vào khung mô hình
+              faceEnrollPrepStartAt = Date.now();
+              enrollInfo.step = 'waiting_face';
               await setVisualPhase('face');
+              updateEnrollPrepTimerBadge();
+              statusTitle.textContent =
+                `Đã lưu câu lệnh! Bạn có 10s căn chỉnh Khuôn mặt`;
+              statusDesc.textContent = `Hãy đặt khuôn mặt của ${enrollInfo.userName} vào đúng KHUNG MÔ HÌNH BẦU DỤC trên màn hình trước khi gửi lên Server.`;
+              speakPrompt(
+                `Đã lưu câu lệnh ${data.voicePassphrase}. Bạn có 10 giây để đặt khuôn mặt vào đúng khung mô hình trên màn hình.`
+              );
             } else {
               statusTitle.textContent = '🎉 Đã đăng ký Giọng nói thành công!';
               statusDesc.textContent = `Đã lưu câu mật khẩu "${data.voicePassphrase}" cho ${enrollInfo.userName}.`;
@@ -647,10 +790,10 @@
           activeSessionUser = data.userName;
           sessionExpiresAt = Date.now() + (data.expiresInSeconds || 35) * 1000;
           await setVisualPhase('face');
-          statusTitle.textContent = `Xin chào ${data.userName}! Nhìn vào Camera sau`;
-          statusDesc.textContent = `Khớp câu lệnh "${data.spokenText}" & giọng nói. Đang quét khuôn mặt từ Camera sau HD...`;
+          statusTitle.textContent = `Xin chào ${data.userName}! Đặt mặt vào khung mô hình`;
+          statusDesc.textContent = `Khớp câu lệnh "${data.spokenText}". Hãy đặt khuôn mặt vào đúng khung mô hình bầu dục để mở khóa...`;
           speakPrompt(
-            `Xin chào ${data.userName}, vui lòng nhìn vào camera sau để mở khóa.`
+            `Xin chào ${data.userName}, vui lòng đặt khuôn mặt vào khung mô hình để mở khóa.`
           );
         } else {
           statusTitle.textContent = 'Chưa khớp Giọng nói / Câu mật khẩu';
@@ -685,7 +828,7 @@
     }
 
     async function processFaceStep() {
-      if (isBusyUploading || Date.now() - lastFaceScanAt < 950) return;
+      if (isBusyUploading || Date.now() - lastFaceScanAt < 900) return;
       if (Date.now() < cooldownUntil) return;
       const frameBlob = await captureHighResFrameBlob();
       if (!frameBlob) return;
@@ -699,6 +842,46 @@
           enrollInfo.active &&
           enrollInfo.step === 'waiting_face'
         ) {
+          const elapsedPrep = Date.now() - faceEnrollPrepStartAt;
+          const remPrepSec = Math.max(
+            0,
+            Math.ceil((FACE_ENROLL_PREP_MS - elapsedPrep) / 1000)
+          );
+
+          // Trong 10 giây đầu tiên: Chỉ kiểm tra khuôn mặt đã đặt đúng vào khung mô hình chưa (chưa gửi lưu lên Server)
+          if (remPrepSec > 0) {
+            const checkForm = new FormData();
+            checkForm.append('image', frameBlob, 'check_guide.jpg');
+            const checkResp = await fetch(
+              `${API_BASE}/api/biometrics/check-face-frame`,
+              {
+                method: 'POST',
+                body: checkForm,
+              }
+            );
+            const checkData = await checkResp.json();
+            if (checkData.aligned) {
+              updateFaceGuideVisual(
+                'aligned',
+                '✅ ĐÃ KHỚP MÔ HÌNH — GIỮ YÊN!'
+              );
+              statusTitle.textContent = `Chuẩn bị lưu sau ${remPrepSec}s (Đã khớp khung!)`;
+              statusDesc.textContent =
+                'Khuôn mặt đã nằm chuẩn trong mô hình. Vui lòng giữ nguyên vị trí cho đến khi hết đếm ngược...';
+            } else {
+              updateFaceGuideVisual(
+                'warning',
+                '⚠️ ĐẶT MẶT VÀO GIỮA KHUNG MÔ HÌNH'
+              );
+              statusTitle.textContent = `Còn ${remPrepSec}s để căn chỉnh khuôn mặt`;
+              statusDesc.textContent =
+                checkData.detail ||
+                'Hãy di chuyển khuôn mặt vào chính giữa khung bầu dục trên màn hình.';
+            }
+            return;
+          }
+
+          // Sau khi đã hết 10 giây đếm ngược: Gửi lên `/api/biometrics/enroll-face` (yêu cầu khớp khung mô hình mới lưu)
           const formData = new FormData();
           formData.append('userId', enrollInfo.userId);
           formData.append('image', frameBlob, 'rear_cam_hd.jpg');
@@ -709,17 +892,28 @@
           });
           const data = await resp.json();
           if (resp.ok && data.ok) {
+            updateFaceGuideVisual('aligned', '🎉 ĐÃ LƯU KHUÔN MẶT CHUẨN HD');
             teleScores.textContent = `FaceNet: 512-D (${data.resolution?.width}x${data.resolution?.height})`;
             statusTitle.textContent = `🎉 Đã lưu Khuôn mặt cho ${enrollInfo.userName}!`;
             statusDesc.textContent =
-              'Hoàn tất thu mẫu trên điện thoại. Đang quay về chế độ trực mở khóa...';
+              'Khuôn mặt đạt chuẩn mô hình đã được lưu lên Server. Đang quay về chế độ trực mở khóa...';
             speakPrompt(
-              `Đã lưu khuôn mặt cho ${enrollInfo.userName} thành công.`
+              `Đã lưu khuôn mặt chuẩn cho ${enrollInfo.userName} thành công.`
             );
             await setVisualPhase('voice');
           } else {
+            updateFaceGuideVisual(
+              data.aligned ? 'aligned' : 'warning',
+              data.countingDown
+                ? `⏳ CÒN ${data.secondsLeft}s CHUẨN BỊ`
+                : '⚠️ CHƯA KHỚP KHUNG MÔ HÌNH'
+            );
+            statusTitle.textContent = data.countingDown
+              ? `Chuẩn bị chụp sau ${data.secondsLeft}s...`
+              : 'Vui lòng đặt khuôn mặt khớp vào khung mô hình';
             statusDesc.textContent =
-              data.detail || 'Đang căn chỉnh khuôn mặt từ Camera sau HD...';
+              data.detail ||
+              'Hãy đặt khuôn mặt nằm gọn vào giữa khung bầu dục để lưu lên Server.';
           }
           return;
         }
@@ -751,6 +945,7 @@
 
         if (data.unlocked) {
           activeSessionToken = null;
+          updateFaceGuideVisual('aligned', '🔓 XÁC THỰC KHUÔN MẶT ĐẠT');
           teleScores.textContent = `Voice: ${Math.round(
             (data.voiceScore || 0.85) * 100
           )}% | Face: ${Math.round((data.faceScore || 0.88) * 100)}%`;
@@ -773,13 +968,17 @@
           statusDesc.textContent =
             data.reason || 'Vui lòng đọc lại câu mật khẩu.';
         } else {
+          updateFaceGuideVisual(
+            'warning',
+            '⚠️ ĐẶT MẶT VÀO KHUNG MÔ HÌNH'
+          );
           if (data.faceScore !== undefined) {
             teleScores.textContent = `FaceNet Similarity: ${Math.round(
               data.faceScore * 100
             )}%`;
           }
           statusDesc.textContent =
-            data.reason || 'Đang quét khuôn mặt từ Camera sau HD...';
+            data.reason || 'Hãy đặt khuôn mặt vào đúng khung mô hình bầu dục...';
         }
       } catch (_) {
       } finally {
@@ -811,7 +1010,9 @@
                 ? 'CHỈ GIỌNG NÓI'
                 : 'CHỈ KHUÔN MẶT';
           enrollPassphraseHint.textContent =
-            'Hãy nói bất kỳ câu mật khẩu nào (tối thiểu 2 từ) vào điện thoại — Hệ thống tự nhận diện Transcript và lưu làm mật khẩu.';
+            enrollInfo.step === 'waiting_face'
+              ? 'Hãy đặt khuôn mặt khớp vào KHUNG MÔ HÌNH BẦU DỤC trên camera (Có 10s để căn chỉnh trước khi chụp).'
+              : 'Hãy nói bất kỳ câu mật khẩu nào (tối thiểu 2 từ) vào điện thoại — Hệ thống tự nhận diện Transcript và lưu làm mật khẩu.';
           teleMode.textContent = 'CHẾ ĐỘ ĐĂNG KÝ MẪU (ADMIN)';
           teleMode.className = 'text-amber-400 font-bold';
 
@@ -826,15 +1027,16 @@
               );
             }
           } else if (enrollInfo.step === 'waiting_face') {
-            if (prevStep !== 'waiting_face') {
+            if (prevMode !== 'enroll' || prevStep !== 'waiting_face') {
+              // Khởi tạo đếm ngược 10 giây chuẩn bị khuôn mặt
+              faceEnrollPrepStartAt = Date.now();
               await setVisualPhase('face');
-              camCountdown.textContent = 'ENROLL HD';
-              statusTitle.textContent = `Chụp Khuôn mặt HD: ${enrollInfo.userName}`;
+              updateEnrollPrepTimerBadge();
+              statusTitle.textContent = `Căn chỉnh Khuôn mặt (10s): ${enrollInfo.userName}`;
               statusDesc.textContent =
-                enrollInfo.message ||
-                'Mời nhìn thẳng vào Camera sau của điện thoại...';
+                'Hãy đặt khuôn mặt vào đúng KHUNG MÔ HÌNH BẦU DỤC trên màn hình. Hệ thống sẽ chụp sau 10 giây...';
               speakPrompt(
-                `Mời ${enrollInfo.userName} nhìn vào camera sau của điện thoại.`
+                `Mời ${enrollInfo.userName} đặt khuôn mặt vào đúng khung mô hình trên màn hình. Chụp sau 10 giây.`
               );
             }
           }
@@ -990,6 +1192,7 @@
         kioskStarted = true;
 
         setInterval(pollKioskState, 1200);
+        setInterval(updateEnrollPrepTimerBadge, 250);
         setInterval(() => {
           const isFacePhase = !cameraVisual.classList.contains('hidden');
           if (isFacePhase) {

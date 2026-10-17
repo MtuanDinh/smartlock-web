@@ -403,11 +403,45 @@ async def enroll_voice_from_phone(
     )
 
 
+@app.post("/api/biometrics/check-face-frame")
+async def check_face_frame_alignment(
+    image: UploadFile = File(...),
+) -> JSONResponse:
+    """
+    Kiểm tra trực tiếp theo thời gian thực (trong lúc đếm ngược 10s) xem khuôn mặt người dùng
+    đã đặt đúng vào KHUNG MÔ HÌNH KHUÔN MẶT trong camera hay chưa.
+    """
+    image_bytes = await image.read()
+    try:
+        meta = engine.check_face_guide(image_bytes)
+        return JSONResponse(
+            content={
+                "ok": True,
+                "aligned": True,
+                "meta": meta,
+                "detail": "✅ Khuôn mặt đã khớp chuẩn trong khung mô hình! Vui lòng giữ yên...",
+            }
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            content={
+                "ok": False,
+                "aligned": False,
+                "detail": str(exc),
+            }
+        )
+
+
 @app.post("/api/biometrics/enroll-face")
 async def enroll_face_from_phone(
     image: UploadFile = File(...),
     userId: Optional[str] = Form(None),
 ) -> JSONResponse:
+    """
+    Lưu khuôn mặt từ Camera sau HD lên Server:
+    - Bắt buộc chờ đủ độ trễ 10 giây kể từ khi bước `waiting_face` bắt đầu để người dùng kịp căn chỉnh khuôn mặt vào khung mô hình.
+    - Bắt buộc khuôn mặt phải nằm đúng trong khung mô hình bầu dục trung tâm và đạt chuẩn độ sáng/độ nét.
+    """
     enroll = fb_get("SmartLock/Control/Biometric_Enroll") or {}
     target_user_id = (userId or str(enroll.get("userId", ""))).strip()
     target_user_name = str(enroll.get("userName", "")).strip()
@@ -417,22 +451,45 @@ async def enroll_face_from_phone(
             status_code=400, detail="Không xác định được thành viên cần chụp khuôn mặt."
         )
 
+    image_bytes = await image.read()
     now_ms = int(time.time() * 1000)
     step_updated_ms = int(enroll.get("updatedAt", 0) or 0)
-    if step_updated_ms > 0 and (now_ms - step_updated_ms) < 2200:
+    elapsed_ms = now_ms - step_updated_ms if step_updated_ms > 0 else 10000
+
+    # Đảm bảo độ trễ 10 giây trước khi cho phép lưu khuôn mặt lên Server
+    if elapsed_ms < 9500:
+        rem_sec = max(1, int(round((10000 - elapsed_ms) / 1000.0)))
+        try:
+            engine.check_face_guide(image_bytes)
+            msg = f"Khuôn mặt đã khớp khung mô hình! Tự động chụp & lưu sau {rem_sec}s..."
+            aligned = True
+        except ValueError as exc:
+            msg = f"Chuẩn bị chụp sau {rem_sec}s — {exc}"
+            aligned = False
+
         return JSONResponse(
             status_code=400,
             content={
                 "ok": False,
-                "detail": f"Đang lấy nét Camera sau HD cho {target_user_name}, vui lòng giữ khuôn mặt trước camera...",
+                "countingDown": True,
+                "secondsLeft": rem_sec,
+                "aligned": aligned,
+                "detail": msg,
             },
         )
 
-    image_bytes = await image.read()
     try:
         face_emb, resolution = engine.extract_face_embedding(image_bytes)
     except ValueError as exc:
-        return JSONResponse(status_code=400, content={"ok": False, "detail": str(exc)})
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "countingDown": False,
+                "aligned": False,
+                "detail": str(exc),
+            },
+        )
 
     fb_patch(
         f"SmartLock/Biometrics/{target_user_id}",
@@ -456,15 +513,24 @@ async def enroll_face_from_phone(
             {
                 "active": False,
                 "step": "completed",
-                "message": f"Đã lưu khuôn mặt HD ({resolution['width']}x{resolution['height']}) cho {target_user_name} thành công!",
+                "message": f"Đã lưu khuôn mặt chuẩn HD ({resolution['width']}x{resolution['height']}) cho {target_user_name} thành công!",
                 "updatedAt": now_ms,
             },
         )
+
+    logger.info(
+        "Enrolled face HD (%dx%d) for user=%s (%s)",
+        resolution["width"],
+        resolution["height"],
+        target_user_id,
+        target_user_name,
+    )
 
     return JSONResponse(
         content={
             "ok": True,
             "userId": target_user_id,
+            "aligned": True,
             "embeddingDim": len(face_emb),
             "resolution": resolution,
             "nextStep": "completed",
