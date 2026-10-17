@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><title>IoT Smart Lock Dashboard</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-error-container": "#93000a", "on-primary-container": "#eeefff", "on-primary": "#ffffff", "tertiary-container": "#8343f4", "surface-bright": "#faf8ff", "on-primary-fixed": "#00174b", "tertiary-fixed-dim": "#d2bbff", "on-secondary-fixed": "#00201d", "primary-fixed": "#dbe1ff", "surface": "#faf8ff", "surface-container-lowest": "#ffffff", "background": "#faf8ff", "surface-dim": "#d2d9f4", "surface-container": "#eaedff", "inverse-on-surface": "#eef0ff", "tertiary": "#6a1edb", "secondary-container": "#86f2e4", "on-error": "#ffffff", "on-background": "#131b2e", "inverse-surface": "#283044", "secondary-fixed": "#89f5e7", "primary-fixed-dim": "#b4c5ff", "surface-container-high": "#e2e7ff", "inverse-primary": "#b4c5ff", "error": "#ba1a1a", "on-tertiary-fixed-variant": "#5a00c6", "surface-container-low": "#f2f3ff", "surface-container-highest": "#dae2fd", "on-surface-variant": "#434655", "error-container": "#ffdad6", "on-tertiary-fixed": "#25005a", "outline": "#737686", "surface-tint": "#0053db", "surface-variant": "#dae2fd", "on-secondary-container": "#006f66", "on-primary-fixed-variant": "#003ea8", "on-tertiary-container": "#f7edff", "on-secondary-fixed-variant": "#005049", "on-surface": "#131b2e", "on-secondary": "#ffffff", "outline-variant": "#c3c6d7", "secondary": "#006a61", "primary": "#004ac6", "primary-container": "#2563eb", "tertiary-fixed": "#eaddff", "on-tertiary": "#ffffff", "secondary-fixed-dim": "#6bd8cb" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "2rem", "margin": "1rem", "margin-desktop": "2.5rem", "gutter-desktop": "1.5rem", "space-lg": "1.5rem", "margin-tablet": "1.5rem", "space-xs": "0.25rem", "space-sm": "0.5rem", "space-md": "1rem", "gutter": "1.25rem" }, "fontFamily": { "label-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"], "body-lg": ["Inter"], "headline-xl": ["Plus Jakarta Sans"], "body-sm": ["Inter"], "label-sm": ["Plus Jakarta Sans"], "headline-xl-mobile": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "label-lg": ["Plus Jakarta Sans"], "body-md": ["Inter"] }, "fontSize": { "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "headline-sm": ["16px", { "lineHeight": "24px", "fontWeight": "600" }], "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "headline-xl": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }], "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "700" }], "headline-xl-mobile": ["26px", { "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "label-lg": ["14px", { "lineHeight": "20px", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface pb-20 lg:pb-0"><header class="fixed top-0 left-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="h-16 w-full px-margin md:px-margin-tablet lg:px-margin-desktop flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><div class="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-on-primary shadow-[0_4px_12px_rgba(37,99,235,0.18)]"><span class="material-symbols-outlined text-[22px]">lock</span></div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm tracking-tight text-on-surface uppercase">Smart Lock</span><span class="font-label-sm text-label-sm text-on-surface-variant">IoT Access Guard</span></div></div><nav class="hidden lg:flex items-center bg-surface-container-low p-space-xs rounded-full border border-outline-variant/30" data-active-classes="bg-primary-container text-on-primary font-bold shadow-[0_4px_12px_rgba(37,99,235,0.15)]"><a class="px-space-md py-space-xs rounded-full font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-all" data-path="tong-quan" style="white-space:nowrap" href="#">Tổng quan</a><a aria-current="page" class="px-space-md py-space-xs rounded-full transition-all bg-primary-container text-on-primary font-bold shadow-[0_4px_12px_rgba(37,99,235,0.15)]" data-path="thanh-vien" style="white-space:nowrap" href="#">Thành viên</a><a class="px-space-md py-space-xs rounded-full font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-all" data-path="nhat-ky" style="white-space:nowrap" href="#">Nhật ký</a></nav></div><div class="flex items-center gap-space-sm"><div class="flex items-center gap-space-xs px-space-sm py-1 bg-secondary-container/30 text-on-secondary-container rounded-full border border-secondary-container/50"><span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-secondary"></span></span><span class="font-label-sm text-label-sm font-semibold">Đang kết nối</span></div><button aria-label="Chuyển đổi giao diện" class="w-9 h-9 rounded-full bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors border border-outline-variant/20" type="button"><span class="material-symbols-outlined text-[20px]">light_mode</span></button><div class="h-6 w-px bg-outline-variant/40 mx-space-xs hidden sm:block"></div><div class="flex items-center gap-space-sm"><button class="hidden sm:flex items-center gap-space-xs px-space-sm py-space-xs rounded-lg font-label-md text-label-md text-error hover:bg-error-container/40 hover:text-on-error-container transition-colors" type="button"><span class="material-symbols-outlined text-[18px]">logout</span>Thoát</button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center cursor-pointer shadow-[0_2px_8px_rgba(0,74,198,0.2)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="w-full max-w-7xl mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop py-space-xl">
+<!-- Top Stats Row (Visual Density & IoT Access Metric Pulse) -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-gutter mb-space-xl">
+<!-- Metric 1: Total Registered -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-shadow duration-300 flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Tổng thành viên</span>
+<span class="font-headline-xl text-headline-xl text-on-surface mt-1">4</span>
+<span class="font-body-sm text-body-sm text-secondary flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-[16px]">verified</span> 100% Đã xác thực
+          </span>
+</div>
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[26px]">group</span>
+</div>
+</div>
+<!-- Metric 2: Active Keys -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-shadow duration-300 flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Thẻ NFC/RFID kích hoạt</span>
+<span class="font-headline-xl text-headline-xl text-on-surface mt-1">3 <span class="font-body-sm text-body-sm text-on-surface-variant font-normal">/ 4</span></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-[16px]">contactless</span> Chuẩn mã hóa Mifare
+          </span>
+</div>
+<div class="w-12 h-12 rounded-xl bg-secondary-container/40 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[26px]">nfc</span>
+</div>
+</div>
+<!-- Metric 4: Real-time Device Sync -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-shadow duration-300 flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Trạng thái đồng bộ</span>
+<span class="font-headline-md text-headline-md text-secondary mt-1 flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary animate-pulse"></span>
+            Trực tuyến
+          </span>
+<span class="font-body-sm text-body-sm text-on-surface-variant mt-1">ESP32 Firmware v2.4.1</span>
+</div>
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[26px]">sync_saved_locally</span>
+</div>
+</div>
+</div>
+<!-- Main Container: Member Management Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<!-- Card Header: Identification & Primary Actions -->
+<div class="p-space-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md bg-gradient-to-r from-surface-container-lowest via-surface-container-low/40 to-surface-container-lowest">
+<div class="flex items-center gap-space-md">
+<div class="w-14 h-14 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shadow-sm">
+<span class="material-symbols-outlined text-[30px]" style="font-variation-settings: 'FILL' 1;">manage_accounts</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Quản lý Thành viên</span>
+<span class="px-space-xs py-0.5 rounded-full bg-primary-fixed-dim/40 text-on-primary-fixed-variant font-label-sm text-label-sm uppercase">Cloud Guard</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+              Cấp phát thẻ từ RFID, mã PIN phân tầng và giám sát phân quyền ra vào căn hộ theo thời gian thực.
+            </p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm w-full md:w-auto">
+<button class="w-full md:w-auto inline-flex items-center justify-center gap-space-xs px-space-lg py-3 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg shadow-md hover:shadow-lg transition-all duration-200" onclick="openAddMemberModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">person_add</span>
+<span>Thêm thành viên mới</span>
+</button>
+</div>
+</div>
+<!-- Search & Filters Toolbar -->
+<div class="px-space-lg py-space-md bg-surface-container-low/50 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-space-md">
+<!-- Search Input -->
+<div class="relative flex-1 max-w-md">
+<span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+<input class="w-full pl-11 pr-4 py-2.5 rounded-xl bg-surface-container-lowest text-on-surface font-body-md text-body-md placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-primary shadow-xs transition-all" id="memberSearchInput" oninput="handleSearch(this.value)" placeholder="Tìm theo tên thành viên, vai trò, mã PIN..." type="text"/>
+</div>
+<!-- Filter Segmented Chips -->
+<div class="flex items-center gap-space-xs overflow-x-auto pb-1 lg:pb-0">
+<button class="px-space-md py-1.5 rounded-full bg-primary-container text-on-primary font-label-md text-label-md shadow-xs whitespace-nowrap" type="button">
+            Tất cả (4)
+          </button>
+<button class="px-space-md py-1.5 rounded-full bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors whitespace-nowrap" type="button">
+            Đang mở quyền (3)
+          </button>
+<button class="px-space-md py-1.5 rounded-full bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors whitespace-nowrap" type="button">
+            Đã cấp thẻ từ (3)
+          </button>
+<button class="px-space-md py-1.5 rounded-full bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors whitespace-nowrap" type="button">
+            Khách có hạn giờ (1)
+          </button>
+</div>
+</div>
+<!-- Responsive Data Table -->
+<div class="w-full overflow-x-auto">
+<table class="w-full text-left border-collapse min-w-[760px]">
+<thead>
+<tr class="bg-surface-container-high/60 text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">
+<th class="py-space-md px-space-lg w-3/12" scope="col">Thành viên</th>
+<th class="py-space-md px-space-md w-2/12" scope="col">Quyền mở cửa</th>
+<th class="py-space-md px-space-md w-3/12" scope="col">Mã PIN bảo mật</th>
+<th class="py-space-md px-space-md w-2/12" scope="col">Thẻ từ RFID / NFC</th>
+<th class="py-space-md px-space-lg w-2/12 text-right" scope="col">Thao tác</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low" id="memberTableBody">
+<!-- Row 1: Featured User "dinh" from screenshot inspiration -->
+<tr class="hover:bg-surface-container-low/40 transition-colors duration-150 group">
+<!-- Member Info -->
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-11 h-11 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-headline-sm text-headline-sm shadow-xs font-semibold">
+                    DI
+                  </div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">dinh</span>
+<button class="w-6 h-6 rounded-md hover:bg-surface-container text-primary flex items-center justify-center transition-colors" title="Đổi tên thành viên" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Chủ sở hữu • Đã đăng ký 12/03/2025</span>
+</div>
+</div>
+</td>
+<!-- Access Permission (Interactive Toggle) -->
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs">
+<button aria-checked="true" class="relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full bg-secondary transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-secondary/50" onclick="togglePermission(this)" role="switch" type="button">
+<span class="translate-x-5 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow-md ring-0 transition duration-200 ease-in-out my-1 ml-1"></span>
+</button>
+<span class="font-label-md text-label-md text-secondary font-bold px-2 py-0.5 rounded-full bg-secondary-container/40 status-text">Mở</span>
+</div>
+</td>
+<!-- PIN Access -->
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs bg-surface-container-low/70 px-space-sm py-1.5 rounded-xl w-fit">
+<span class="font-body-md text-body-md tracking-widest text-primary font-bold pin-display" data-pin="789012">• • • • • •</span>
+<button class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="togglePinVisibility(this)" title="Xem mã PIN" type="button">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="w-7 h-7 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-primary flex items-center justify-center shadow-xs transition-colors" onclick="promptEditPin('dinh')" title="Chỉnh sửa mã PIN" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</div>
+</td>
+<!-- RFID / NFC Card Status -->
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary-fixed-dim/40 text-on-primary-fixed-variant font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">credit_card</span>
+                    Đã cấp thẻ
+                  </span>
+<button class="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-all" onclick="reloadRfid(this, 'DI-9941')" title="Cấp phát / Quét lại thẻ RFID" type="button">
+<span class="material-symbols-outlined text-[18px]">cached</span>
+</button>
+</div>
+</td>
+<!-- Actions -->
+<td class="py-space-md px-space-lg text-right">
+<div class="flex items-center justify-end gap-space-xs">
+<button class="w-9 h-9 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="openMemberDetails('dinh', 'Chủ sở hữu')" title="Chi tiết phân quyền" type="button">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+<button class="w-9 h-9 rounded-xl bg-error-container/40 hover:bg-error-container text-on-error-container flex items-center justify-center transition-colors" onclick="deleteMember(this, 'dinh')" title="Xóa thành viên" type="button">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Secondary Resident "Nguyen Tram" -->
+<tr class="hover:bg-surface-container-low/40 transition-colors duration-150 group">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-11 h-11 rounded-full bg-secondary-container/60 flex items-center justify-center text-on-secondary-container font-headline-sm text-headline-sm shadow-xs font-semibold">
+                    NT
+                  </div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Nguyễn Trâm</span>
+<button class="w-6 h-6 rounded-md hover:bg-surface-container text-primary flex items-center justify-center transition-colors" title="Đổi tên thành viên" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Thành viên gia đình • Đã đăng ký 15/03/2025</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs">
+<button aria-checked="true" class="relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full bg-secondary transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-secondary/50" onclick="togglePermission(this)" role="switch" type="button">
+<span class="translate-x-5 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow-md ring-0 transition duration-200 ease-in-out my-1 ml-1"></span>
+</button>
+<span class="font-label-md text-label-md text-secondary font-bold px-2 py-0.5 rounded-full bg-secondary-container/40 status-text">Mở</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs bg-surface-container-low/70 px-space-sm py-1.5 rounded-xl w-fit">
+<span class="font-body-md text-body-md tracking-widest text-primary font-bold pin-display" data-pin="246810">• • • • • •</span>
+<button class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="togglePinVisibility(this)" title="Xem mã PIN" type="button">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="w-7 h-7 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-primary flex items-center justify-center shadow-xs transition-colors" onclick="promptEditPin('Nguyễn Trâm')" title="Chỉnh sửa mã PIN" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary-fixed-dim/40 text-on-primary-fixed-variant font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">credit_card</span>
+                    Đã cấp thẻ
+                  </span>
+<button class="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-all" onclick="reloadRfid(this, 'NT-8812')" title="Cấp phát / Quét lại thẻ RFID" type="button">
+<span class="material-symbols-outlined text-[18px]">cached</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-lg text-right">
+<div class="flex items-center justify-end gap-space-xs">
+<button class="w-9 h-9 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="openMemberDetails('Nguyễn Trâm', 'Thành viên gia đình')" title="Chi tiết phân quyền" type="button">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+<button class="w-9 h-9 rounded-xl bg-error-container/40 hover:bg-error-container text-on-error-container flex items-center justify-center transition-colors" onclick="deleteMember(this, 'Nguyễn Trâm')" title="Xóa thành viên" type="button">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 3: Security / Technician "Bao Tri Vien" -->
+<tr class="hover:bg-surface-container-low/40 transition-colors duration-150 group">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-11 h-11 rounded-full bg-tertiary-fixed flex items-center justify-center text-tertiary font-headline-sm text-headline-sm shadow-xs font-semibold">
+                    KT
+                  </div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Kỹ thuật viên Tòa nhà</span>
+<button class="w-6 h-6 rounded-md hover:bg-surface-container text-primary flex items-center justify-center transition-colors" title="Đổi tên thành viên" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Hỗ trợ kỹ thuật • Giờ hành chính</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs">
+<button aria-checked="true" class="relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full bg-secondary transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-secondary/50" onclick="togglePermission(this)" role="switch" type="button">
+<span class="translate-x-5 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow-md ring-0 transition duration-200 ease-in-out my-1 ml-1"></span>
+</button>
+<span class="font-label-md text-label-md text-secondary font-bold px-2 py-0.5 rounded-full bg-secondary-container/40 status-text">Mở</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs bg-surface-container-low/70 px-space-sm py-1.5 rounded-xl w-fit">
+<span class="font-body-md text-body-md tracking-widest text-primary font-bold pin-display" data-pin="554433">• • • • • •</span>
+<button class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="togglePinVisibility(this)" title="Xem mã PIN" type="button">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="w-7 h-7 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-primary flex items-center justify-center shadow-xs transition-colors" onclick="promptEditPin('Kỹ thuật viên Tòa nhà')" title="Chỉnh sửa mã PIN" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary-fixed-dim/40 text-on-primary-fixed-variant font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">credit_card</span>
+                    Đã cấp thẻ
+                  </span>
+<button class="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-all" onclick="reloadRfid(this, 'KT-1049')" title="Cấp phát / Quét lại thẻ RFID" type="button">
+<span class="material-symbols-outlined text-[18px]">cached</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-lg text-right">
+<div class="flex items-center justify-end gap-space-xs">
+<button class="w-9 h-9 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="openMemberDetails('Kỹ thuật viên Tòa nhà', 'Hỗ trợ kỹ thuật')" title="Chi tiết phân quyền" type="button">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+<button class="w-9 h-9 rounded-xl bg-error-container/40 hover:bg-error-container text-on-error-container flex items-center justify-center transition-colors" onclick="deleteMember(this, 'Kỹ thuật viên Tòa nhà')" title="Xóa thành viên" type="button">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 4: Temporary Guest (Disabled Access Demo) -->
+<tr class="hover:bg-surface-container-low/40 transition-colors duration-150 group">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-space-md">
+<div class="w-11 h-11 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant font-headline-sm text-headline-sm shadow-xs font-semibold">
+                    KH
+                  </div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Khách thuê phòng 402</span>
+<button class="w-6 h-6 rounded-md hover:bg-surface-container text-primary flex items-center justify-center transition-colors" title="Đổi tên thành viên" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</div>
+<span class="font-body-sm text-body-sm text-error flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">schedule</span> Hết hạn lúc 12:00 hôm nay
+                    </span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs">
+<button aria-checked="false" class="relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full bg-outline-variant transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/40" onclick="togglePermission(this)" role="switch" type="button">
+<span class="translate-x-1 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow-md ring-0 transition duration-200 ease-in-out my-1 ml-1"></span>
+</button>
+<span class="font-label-md text-label-md text-on-surface-variant font-bold px-2 py-0.5 rounded-full bg-surface-container-high status-text">Tắt</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs bg-surface-container-low/70 px-space-sm py-1.5 rounded-xl w-fit opacity-60">
+<span class="font-body-md text-body-md tracking-widest text-outline font-bold pin-display" data-pin="991122">• • • • • •</span>
+<button class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="togglePinVisibility(this)" title="Xem mã PIN" type="button">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="w-7 h-7 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-primary flex items-center justify-center shadow-xs transition-colors" onclick="promptEditPin('Khách thuê phòng 402')" title="Chỉnh sửa mã PIN" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-medium">
+<span class="material-symbols-outlined text-[14px]">credit_card_off</span>
+                    Chưa cấp thẻ
+                  </span>
+<button class="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-all" onclick="reloadRfid(this, null)" title="Cấp phát thẻ mới" type="button">
+<span class="material-symbols-outlined text-[18px]">add_card</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-lg text-right">
+<div class="flex items-center justify-end gap-space-xs">
+<button class="w-9 h-9 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="openMemberDetails('Khách thuê phòng 402', 'Khách tạm thời')" title="Chi tiết phân quyền" type="button">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+<button class="w-9 h-9 rounded-xl bg-error-container/40 hover:bg-error-container text-on-error-container flex items-center justify-center transition-colors" onclick="deleteMember(this, 'Khách thuê phòng 402')" title="Xóa thành viên" type="button">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer & Security Notice -->
+<div class="px-space-lg py-space-md bg-surface-container-low/30 flex flex-col sm:flex-row items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-xs text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px] text-secondary">encrypted</span>
+<span>Mọi thay đổi quyền mở cửa và mã PIN được mã hóa chuẩn AES-256 gửi thẳng tới MCU khóa cửa.</span>
+</div>
+<div class="font-label-md text-label-md text-on-surface-variant">
+          Hiển thị <span class="font-bold text-on-surface">4</span> trên <span class="font-bold text-on-surface">4</span> thành viên
+        </div>
+</div>
+</div>
+<!-- Additional IoT Lock Hardware Diagnostic Panel (Contextual Richness) -->
+<div class="mt-space-xl grid grid-cols-1 md:grid-cols-2 gap-gutter">
+<!-- Quick Card: NFC Tag Enrollment Guide -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center gap-space-sm mb-space-sm">
+<div class="w-9 h-9 rounded-lg bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">contactless</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface">Cấp phát thẻ từ RFID</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Để cấp thẻ mới, bấm nút icon làm mới trên hàng thành viên và áp thẻ vật lý vào bề mặt cảm ứng khóa cửa trong vòng 10 giây.
+          </p>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary font-bold uppercase tracking-wider">Tần số: 13.56 MHz</span>
+<button class="font-label-md text-label-md text-primary hover:underline" onclick="alert('Đang kích hoạt chế độ lắng nghe RFID trên thiết bị...')" type="button">Thử nghiệm quét</button>
+</div>
+</div>
+<!-- Quick Card: Security Auto-lock Rules -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center gap-space-sm mb-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">security</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface">Chính sách mã PIN</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Mã PIN yêu cầu tối thiểu 6 chữ số ngẫu nhiên. Hệ thống tự động vô hiệu hóa bàn phím 3 phút khi nhập sai liên tiếp quá số lần quy định.
+          </p>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-bold uppercase tracking-wider">Chống nhìn trộm: BẬT</span>
+<button class="font-label-md text-label-md text-primary hover:underline" onclick="alert('Cài đặt chống nhìn trộm (Anti-peep PIN) đang hoạt động.')" type="button">Chi tiết bảo mật</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Interactive Modal: Add Member (Hidden by default) -->
+<div class="fixed inset-0 z-50 hidden bg-inverse-surface/40 backdrop-blur-sm flex items-center justify-center p-margin" id="addMemberModal">
+<div class="bg-surface-container-lowest rounded-xl max-w-lg w-full p-space-lg shadow-xl animate-in fade-in zoom-in-95 duration-200">
+<div class="flex items-center justify-between mb-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">person_add</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Thêm thành viên mới</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Đăng ký định danh và quyền ra vào khóa cửa</p>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant flex items-center justify-center" onclick="closeAddMemberModal()" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<form class="space-y-space-md" id="newMemberForm" onsubmit="submitNewMember(event)">
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-1">Họ và tên thành viên</label>
+<input class="w-full px-space-md py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary shadow-xs" id="inputMemberName" placeholder="Ví dụ: Hoàng Minh Quân" required="" type="text"/>
+</div>
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-1">Vai trò &amp; Phân quyền</label>
+<select class="w-full px-space-md py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary shadow-xs" id="inputMemberRole">
+<option value="Thành viên gia đình">Thành viên gia đình</option>
+<option value="Quản trị viên phụ">Quản trị viên phụ</option>
+<option value="Khách lưu trú tạm thời">Khách lưu trú tạm thời</option>
+<option value="Dịch vụ dọn dẹp">Dịch vụ dọn dẹp</option>
+</select>
+</div>
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-1">Thiết lập mã PIN (6 chữ số)</label>
+<input class="w-full px-space-md py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md tracking-widest focus:outline-none focus:ring-2 focus:ring-primary shadow-xs" id="inputMemberPin" maxlength="6" placeholder="••••••" required="" type="password"/>
+</div>
+<div class="p-space-sm rounded-xl bg-surface-container-low flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">Cho phép mở cửa ngay</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Kích hoạt quyền mở trên khóa vật lý</span>
+</div>
+<input checked="" class="w-5 h-5 rounded text-primary accent-primary" id="inputMemberAllow" type="checkbox"/>
+</div>
+<div class="flex items-center justify-end gap-space-sm pt-space-sm">
+<button class="px-space-md py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container text-on-surface-variant font-label-lg text-label-lg transition-colors" onclick="closeAddMemberModal()" type="button">
+            Hủy bỏ
+          </button>
+<button class="px-space-lg py-2.5 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg shadow-md transition-all" type="submit">
+            Lưu thành viên
+          </button>
+</div>
+</form>
+</div>
+</div>
+<!-- Toast Notification Template Container -->
+<div class="fixed bottom-6 right-6 z-50 hidden max-w-sm bg-inverse-surface text-inverse-on-surface px-space-md py-space-sm rounded-xl shadow-xl flex items-center gap-space-sm animate-in fade-in slide-in-from-bottom-5" id="toastNotification">
+<span class="material-symbols-outlined text-secondary" id="toastIcon">check_circle</span>
+<span class="font-body-sm text-body-sm" id="toastMessage">Thao tác thành công.</span>
+</div>
+</div>
+<script>
+  function showToast(message, isError = false) {
+    const toast = document.getElementById('toastNotification');
+    const msg = document.getElementById('toastMessage');
+    const icon = document.getElementById('toastIcon');
+    if (!toast) return;
+    
+    msg.textContent = message;
+    icon.textContent = isError ? 'error' : 'check_circle';
+    icon.className = isError ? 'material-symbols-outlined text-error' : 'material-symbols-outlined text-secondary';
+    
+    toast.classList.remove('hidden');
+    clearTimeout(window._toastTimeout);
+    window._toastTimeout = setTimeout(() => {
+      toast.classList.add('hidden');
+    }, 3200);
+  }
+
+  function togglePermission(btn) {
+    const isChecked = btn.getAttribute('aria-checked') === 'true';
+    const newChecked = !isChecked;
+    btn.setAttribute('aria-checked', String(newChecked));
+    
+    const knob = btn.querySelector('span');
+    const container = btn.parentElement;
+    const statusText = container.querySelector('.status-text');
+
+    if (newChecked) {
+      btn.className = 'relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full bg-secondary transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-secondary/50';
+      knob.className = 'translate-x-5 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow-md ring-0 transition duration-200 ease-in-out my-1 ml-1';
+      statusText.textContent = 'Mở';
+      statusText.className = 'font-label-md text-label-md text-secondary font-bold px-2 py-0.5 rounded-full bg-secondary-container/40 status-text';
+      showToast('Đã cấp quyền mở khóa cho thành viên');
+    } else {
+      btn.className = 'relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full bg-outline-variant transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/40';
+      knob.className = 'translate-x-1 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow-md ring-0 transition duration-200 ease-in-out my-1 ml-1';
+      statusText.textContent = 'Tắt';
+      statusText.className = 'font-label-md text-label-md text-on-surface-variant font-bold px-2 py-0.5 rounded-full bg-surface-container-high status-text';
+      showToast('Đã tạm khóa quyền mở của thành viên');
+    }
+  }
+
+  function togglePinVisibility(btn) {
+    const parent = btn.parentElement;
+    const pinDisplay = parent.querySelector('.pin-display');
+    const icon = btn.querySelector('.material-symbols-outlined');
+    const realPin = pinDisplay.getAttribute('data-pin') || '123456';
+
+    if (icon.textContent === 'visibility') {
+      icon.textContent = 'visibility_off';
+      pinDisplay.textContent = realPin;
+      pinDisplay.classList.remove('tracking-widest');
+      pinDisplay.classList.add('tracking-wider');
+    } else {
+      icon.textContent = 'visibility';
+      pinDisplay.textContent = '• • • • • •';
+      pinDisplay.classList.add('tracking-widest');
+      pinDisplay.classList.remove('tracking-wider');
+    }
+  }
+
+  function promptEditPin(name) {
+    const newPin = prompt(`Nhập mã PIN 6 số mới cho thành viên [${name}]:`);
+    if (newPin && newPin.trim().length >= 4) {
+      showToast(`Đã đồng bộ mã PIN mới cho [${name}]`);
+    } else if (newPin !== null) {
+      showToast('Mã PIN không hợp lệ (tối thiểu 4 - 6 chữ số)', true);
+    }
+  }
+
+  function reloadRfid(btn, rfidCode) {
+    const icon = btn.querySelector('.material-symbols-outlined');
+    icon.classList.add('animate-spin');
+    showToast('Đang kích hoạt chế độ đồng bộ thẻ RFID...');
+    setTimeout(() => {
+      icon.classList.remove('animate-spin');
+      showToast('Thẻ RFID đã được nhận diện và cập nhật thành công!');
+    }, 1200);
+  }
+
+  function deleteMember(btn, name) {
+    if (confirm(`Bạn có chắc chắn muốn xóa thành viên [${name}] khỏi hệ thống khóa cửa? Hành động này sẽ vô hiệu hóa thẻ từ và mã PIN tương ứng.`)) {
+      const row = btn.closest('tr');
+      if (row) {
+        row.classList.add('opacity-30');
+        setTimeout(() => {
+          row.remove();
+          showToast(`Đã xóa thành viên [${name}]`);
+        }, 300);
+      }
+    }
+  }
+
+  function openMemberDetails(name, role) {
+    showToast(`Đang tải nhật ký truy cập riêng của [${name}] (${role})...`);
+  }
+
+  function openAddMemberModal() {
+    document.getElementById('addMemberModal').classList.remove('hidden');
+  }
+
+  function closeAddMemberModal() {
+    document.getElementById('addMemberModal').classList.add('hidden');
+  }
+
+  function submitNewMember(e) {
+    e.preventDefault();
+    const name = document.getElementById('inputMemberName').value.trim();
+    const role = document.getElementById('inputMemberRole').value;
+    const pin = document.getElementById('inputMemberPin').value;
+    const allow = document.getElementById('inputMemberAllow').checked;
+
+    if (!name || !pin) return;
+
+    const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'TV';
+    const tbody = document.getElementById('memberTableBody');
+
+    const newRow = document.createElement('tr');
+    newRow.className = 'hover:bg-surface-container-low/40 transition-colors duration-150 group animate-in fade-in duration-300';
+    newRow.innerHTML = `
+      <td class="py-space-md px-space-lg">
+        <div class="flex items-center gap-space-md">
+          <div class="w-11 h-11 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-headline-sm text-headline-sm shadow-xs font-semibold">
+            ${initials}
+          </div>
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-space-xs">
+              <span class="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">${name}</span>
+              <button type="button" title="Đổi tên thành viên" class="w-6 h-6 rounded-md hover:bg-surface-container text-primary flex items-center justify-center transition-colors">
+                <span class="material-symbols-outlined text-[16px]">edit</span>
+              </button>
+            </div>
+            <span class="font-body-sm text-body-sm text-on-surface-variant truncate">${role} • Vừa thêm</span>
+          </div>
+        </div>
+      </td>
+      <td class="py-space-md px-space-md">
+        <div class="flex items-center gap-space-xs">
+          <button 
+            type="button" 
+            role="switch" 
+            aria-checked="${allow}"
+            onclick="togglePermission(this)"
+            class="relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full ${allow ? 'bg-secondary' : 'bg-outline-variant'} transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-secondary/50"
+          >
+            <span class="${allow ? 'translate-x-5' : 'translate-x-1'} pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow-md ring-0 transition duration-200 ease-in-out my-1 ml-1"></span>
+          </button>
+          <span class="font-label-md text-label-md ${allow ? 'text-secondary bg-secondary-container/40' : 'text-on-surface-variant bg-surface-container-high'} font-bold px-2 py-0.5 rounded-full status-text">${allow ? 'Mở' : 'Tắt'}</span>
+        </div>
+      </td>
+      <td class="py-space-md px-space-md">
+        <div class="flex items-center gap-space-xs bg-surface-container-low/70 px-space-sm py-1.5 rounded-xl w-fit">
+          <span class="font-body-md text-body-md tracking-widest text-primary font-bold pin-display" data-pin="${pin}">• • • • • •</span>
+          <button type="button" onclick="togglePinVisibility(this)" class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Xem mã PIN">
+            <span class="material-symbols-outlined text-[18px]">visibility</span>
+          </button>
+          <button type="button" onclick="promptEditPin('${name}')" class="w-7 h-7 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-primary flex items-center justify-center shadow-xs transition-colors" title="Chỉnh sửa mã PIN">
+            <span class="material-symbols-outlined text-[16px]">edit</span>
+          </button>
+        </div>
+      </td>
+      <td class="py-space-md px-space-md">
+        <div class="flex items-center gap-space-xs">
+          <span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-medium">
+            <span class="material-symbols-outlined text-[14px]">credit_card_off</span>
+            Chưa cấp thẻ
+          </span>
+          <button type="button" onclick="reloadRfid(this, null)" title="Cấp phát thẻ mới" class="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-all">
+            <span class="material-symbols-outlined text-[18px]">add_card</span>
+          </button>
+        </div>
+      </td>
+      <td class="py-space-md px-space-lg text-right">
+        <div class="flex items-center justify-end gap-space-xs">
+          <button type="button" onclick="openMemberDetails('${name}', '${role}')" title="Chi tiết phân quyền" class="w-9 h-9 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors">
+            <span class="material-symbols-outlined text-[20px]">tune</span>
+          </button>
+          <button type="button" onclick="deleteMember(this, '${name}')" title="Xóa thành viên" class="w-9 h-9 rounded-xl bg-error-container/40 hover:bg-error-container text-on-error-container flex items-center justify-center transition-colors">
+            <span class="material-symbols-outlined text-[20px]">delete</span>
+          </button>
+        </div>
+      </td>
+    `;
+
+    tbody.prepend(newRow);
+    closeAddMemberModal();
+    document.getElementById('newMemberForm').reset();
+    showToast(`Đã thêm thành công thành viên [${name}]!`);
+  }
+
+  function handleSearch(query) {
+    const rows = document.querySelectorAll('#memberTableBody tr');
+    const term = query.toLowerCase().trim();
+    rows.forEach(row => {
+      const text = row.innerText.toLowerCase();
+      if (!term || text.includes(term)) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  }
+</script></main><footer class="w-full bg-surface-container-low border-t border-outline-variant/20 py-space-md"><div class="w-full px-margin md:px-margin-tablet lg:px-margin-desktop flex flex-col sm:flex-row items-center justify-between gap-space-sm font-body-sm text-body-sm text-on-surface-variant"><span>© 2025 Smart Lock System. Chuẩn bảo mật IoT thời gian thực.</span><div class="flex items-center gap-space-md font-label-md text-label-md"><a class="hover:text-on-surface transition-colors" href="#">Tài liệu SDK</a><a class="hover:text-on-surface transition-colors" href="#">Trung tâm bảo mật</a><a class="hover:text-on-surface transition-colors" href="#">Hỗ trợ kỹ thuật</a></div></div></footer>
+<!-- Responsive Bottom Navigation Bar for Tablet & Mobile (< 1024px) -->
+<nav aria-label="Điều hướng di động và máy tính bảng" class="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-surface-container-lowest/95 backdrop-blur-xl border-t border-outline-variant/30 shadow-[0_-4px_20px_rgba(15,23,42,0.06)]">
+  <div class="max-w-lg mx-auto px-3 h-16 flex items-center justify-around">
+    
+      <a href="#" data-path="tong-quan" aria-current="false" class="group flex-1 flex flex-col items-center justify-center py-2 gap-1 transition-all text-on-surface-variant hover:text-on-surface font-medium">
+        <div class="px-5 py-1 rounded-full flex items-center justify-center transition-all bg-transparent text-on-surface-variant group-hover:bg-surface-container">
+          <span class="material-symbols-outlined text-[20px]">space_dashboard</span>
+        </div>
+        <span class="font-label-sm text-[11px] tracking-tight whitespace-nowrap">Tổng quan</span>
+      </a>
+
+      <a href="#" data-path="thanh-vien" aria-current="page" class="group flex-1 flex flex-col items-center justify-center py-2 gap-1 transition-all text-primary font-bold">
+        <div class="px-5 py-1 rounded-full flex items-center justify-center transition-all bg-primary-container text-on-primary shadow-[0_4px_12px_rgba(37,99,235,0.22)]">
+          <span class="material-symbols-outlined text-[20px]">group</span>
+        </div>
+        <span class="font-label-sm text-[11px] tracking-tight whitespace-nowrap">Thành viên</span>
+      </a>
+
+      <a href="#" data-path="nhat-ky" aria-current="false" class="group flex-1 flex flex-col items-center justify-center py-2 gap-1 transition-all text-on-surface-variant hover:text-on-surface font-medium">
+        <div class="px-5 py-1 rounded-full flex items-center justify-center transition-all bg-transparent text-on-surface-variant group-hover:bg-surface-container">
+          <span class="material-symbols-outlined text-[20px]">history</span>
+        </div>
+        <span class="font-label-sm text-[11px] tracking-tight whitespace-nowrap">Nhật ký</span>
+      </a>
+  </div>
+</nav>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const map = {
+    'tong-quan': 'dashboard',
+    'thanh-vien': 'users',
+    'nhat-ky': 'logs',
+    'login': 'login'
+  };
+  document.querySelectorAll('a[data-path]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const target = map[a.getAttribute('data-path')];
+      if (target) {
+        e.preventDefault();
+        window.parent.postMessage({ type: 'SWITCH_SCREEN', screen: target }, '*');
+        if (window.parent === window) window.location.href = target + '.html';
+      }
+    });
+  });
+  document.querySelectorAll('button').forEach(btn => {
+    if (btn.textContent.includes('Thoát') || btn.textContent.includes('Đăng xuất')) {
+      btn.addEventListener('click', () => {
+        window.parent.postMessage({ type: 'SWITCH_SCREEN', screen: 'login' }, '*');
+        if (window.parent === window) window.location.href = 'login.html';
+      });
+    }
+  });
+  const loginForm = document.getElementById('loginForm');
+  if (loginForm) {
+    loginForm.addEventListener('submit', () => {
+      setTimeout(() => {
+        window.parent.postMessage({ type: 'SWITCH_SCREEN', screen: 'dashboard' }, '*');
+        if (window.parent === window) window.location.href = 'dashboard.html';
+      }, 600);
+    });
+  }
+});
+</script>
+</body></html>
