@@ -174,6 +174,8 @@ export function buildClearBiometricUpdates(
   if (target === 'face' || target === 'both') {
     updates[`${PATHS.USER_DETAIL(userId)}/hasFace`] = false;
     updates[`${PATHS.BIOMETRIC_ITEM(userId)}/faceEmbedding`] = null;
+    updates[`${PATHS.BIOMETRIC_ITEM(userId)}/faceEmbeddings`] = null;
+    updates[`${PATHS.BIOMETRIC_ITEM(userId)}/faceAnglesCount`] = null;
   }
   return updates;
 }

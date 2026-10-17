@@ -181,6 +181,35 @@
 
       <!-- Stage Visual: High-Resolution Rear Camera Face Scanner with Biometric Face Model Guide & Live 5-Algorithm HUD -->
       <div id="camera-visual" class="hidden flex-col items-center justify-center space-y-2.5 w-full">
+        <!-- BẢNG ĐIỀU HƯỚNG 5 GÓC KHUÔN MẶT (CHỈ HIỂN THỊ KHI ĐĂNG KÝ ENROLL) -->
+        <div id="enroll-angle-stepper" class="hidden w-full bg-slate-950/85 border border-sky-500/30 rounded-2xl p-2.5 space-y-1.5 shadow-lg">
+          <div class="flex items-center justify-between px-1">
+            <span class="text-[10px] font-extrabold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+              <span>🧭</span> 5 GÓC KHUÔN MẶT CẦN THU
+            </span>
+            <span id="enroll-angle-progress" class="text-[10px] font-mono font-bold text-amber-300">
+              Góc 1/5: Chính diện
+            </span>
+          </div>
+          <div class="grid grid-cols-5 gap-1.5 text-center font-mono text-[10px]">
+            <div id="step-pose-pill-center" class="pose-step-pill rounded-lg py-1.5 px-0.5 border border-sky-400 bg-sky-500/30 text-sky-100 font-extrabold ring-1 ring-sky-400/50 transition-all shadow">
+              🎯 Thẳng
+            </div>
+            <div id="step-pose-pill-left" class="pose-step-pill rounded-lg py-1.5 px-0.5 border border-slate-800 bg-slate-900/60 text-slate-500 font-medium transition-all">
+              ⬅️ Trái
+            </div>
+            <div id="step-pose-pill-right" class="pose-step-pill rounded-lg py-1.5 px-0.5 border border-slate-800 bg-slate-900/60 text-slate-500 font-medium transition-all">
+              ➡️ Phải
+            </div>
+            <div id="step-pose-pill-up" class="pose-step-pill rounded-lg py-1.5 px-0.5 border border-slate-800 bg-slate-900/60 text-slate-500 font-medium transition-all">
+              ⬆️ Ngẩng
+            </div>
+            <div id="step-pose-pill-down" class="pose-step-pill rounded-lg py-1.5 px-0.5 border border-slate-800 bg-slate-900/60 text-slate-500 font-medium transition-all">
+              ⬇️ Cúi
+            </div>
+          </div>
+        </div>
+
         <div id="camera-frame-box" class="relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-sky-400/70 bg-black shadow-xl shadow-sky-500/20 transition-colors duration-300">
           <video
             id="kiosk-video"
@@ -320,14 +349,23 @@
           </div>
         </div>
 
-        <!-- Nút chụp nhanh khi đã khớp chuẩn 5/5 thuật toán (không cần đợi hết 10s nếu người dùng đã căn chuẩn) -->
-        <button
-          id="btn-force-snap-face"
-          type="button"
-          class="hidden w-full py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 active:scale-95"
-        >
-          <span>📸 CHỤP NGAY (ĐÃ ĐẠT 5/5 CHUẨN)</span>
-        </button>
+        <!-- Nút chụp góc hiện tại hoặc hoàn tất sớm nếu người dùng đã thu đủ ít nhất 1 góc -->
+        <div class="flex items-center gap-2 w-full">
+          <button
+            id="btn-force-snap-face"
+            type="button"
+            class="hidden flex-1 py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+          >
+            <span>📸 CHỤP GÓC NÀY NGAY</span>
+          </button>
+          <button
+            id="btn-finish-enroll-angles"
+            type="button"
+            class="hidden py-2.5 px-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all flex items-center justify-center gap-1 active:scale-95 shrink-0"
+          >
+            <span>✓ Lưu &amp; Hoàn tất</span>
+          </button>
+        </div>
 
         <canvas id="capture-canvas" class="hidden"></canvas>
       </div>
@@ -396,6 +434,9 @@
     const faceAlgoScoreBadge = document.getElementById('face-algo-score-badge');
     const faceAlgoList = document.getElementById('face-algo-list');
     const btnForceSnapFace = document.getElementById('btn-force-snap-face');
+    const btnFinishEnrollAngles = document.getElementById('btn-finish-enroll-angles');
+    const enrollAngleStepper = document.getElementById('enroll-angle-stepper');
+    const enrollAngleProgress = document.getElementById('enroll-angle-progress');
     const vadCore = document.getElementById('vad-core');
     const vadIcon = document.getElementById('vad-icon');
     const vadStateLabel = document.getElementById('vad-state-label');
@@ -427,6 +468,17 @@
     let audioCtx = null;
     let scriptProcessor = null;
     let kioskStarted = false;
+
+    // 5 Góc khuôn mặt cần thu khi Đăng ký (Enroll)
+    const ENROLL_POSES = [
+      { id: 'center', label: 'Chính diện', instruction: 'Vui lòng nhìn thẳng vào camera' },
+      { id: 'left',   label: 'Quay Trái',  instruction: 'Tốt lắm, vui lòng quay mặt sang trái' },
+      { id: 'right',  label: 'Quay Phải',  instruction: 'Tốt lắm, vui lòng quay mặt sang phải' },
+      { id: 'up',     label: 'Ngẩng Lên',  instruction: 'Tốt lắm, vui lòng ngẩng mặt lên' },
+      { id: 'down',   label: 'Cúi Xuống',  instruction: 'Tốt lắm, vui lòng cúi mặt xuống' },
+    ];
+    let currentEnrollPoseIndex = 0;
+    let completedEnrollPoses = new Set();
 
     let currentServerMode = 'verify';
     let enrollInfo = {
@@ -844,6 +896,58 @@
       }
     }
 
+    function updateEnrollAngleStepperUI() {
+      if (
+        !kioskStarted ||
+        currentServerMode !== 'enroll' ||
+        !enrollInfo.active ||
+        enrollInfo.step !== 'waiting_face'
+      ) {
+        if (enrollAngleStepper) enrollAngleStepper.classList.add('hidden');
+        if (btnFinishEnrollAngles) btnFinishEnrollAngles.classList.add('hidden');
+        return;
+      }
+      if (enrollAngleStepper) enrollAngleStepper.classList.remove('hidden');
+
+      const currentPoseObj = ENROLL_POSES[currentEnrollPoseIndex] || ENROLL_POSES[0];
+      if (enrollAngleProgress) {
+        const displayIdx = Math.min(currentEnrollPoseIndex + 1, ENROLL_POSES.length);
+        enrollAngleProgress.textContent = `Góc ${displayIdx}/5: ${currentPoseObj.label}`;
+      }
+
+      ENROLL_POSES.forEach((p, idx) => {
+        const pill = document.getElementById(`step-pose-pill-${p.id}`);
+        if (!pill) return;
+        const isDone = completedEnrollPoses.has(p.id);
+        const isCurrent = idx === currentEnrollPoseIndex;
+
+        if (isDone) {
+          pill.className =
+            'pose-step-pill rounded-lg py-1.5 px-0.5 border border-emerald-400 bg-emerald-500/25 text-emerald-200 font-bold transition-all shadow';
+          pill.textContent = `✓ ${p.label}`;
+        } else if (isCurrent) {
+          pill.className =
+            'pose-step-pill rounded-lg py-1.5 px-0.5 border border-sky-400 bg-sky-500/30 text-sky-100 font-extrabold ring-1 ring-sky-400/50 transition-all shadow-md animate-pulse';
+          const icon = p.id === 'center' ? '🎯' : p.id === 'left' ? '⬅️' : p.id === 'right' ? '➡️' : p.id === 'up' ? '⬆️' : '⬇️';
+          pill.textContent = `${icon} ${p.label}`;
+        } else {
+          pill.className =
+            'pose-step-pill rounded-lg py-1.5 px-0.5 border border-slate-800 bg-slate-900/60 text-slate-500 font-medium transition-all';
+          const icon = p.id === 'center' ? '🎯' : p.id === 'left' ? '⬅️' : p.id === 'right' ? '➡️' : p.id === 'up' ? '⬆️' : '⬇️';
+          pill.textContent = `${icon} ${p.label}`;
+        }
+      });
+
+      if (btnFinishEnrollAngles) {
+        if (completedEnrollPoses.size >= 1) {
+          btnFinishEnrollAngles.classList.remove('hidden');
+          btnFinishEnrollAngles.textContent = `✓ Lưu (${completedEnrollPoses.size}/5 góc)`;
+        } else {
+          btnFinishEnrollAngles.classList.add('hidden');
+        }
+      }
+    }
+
     function updateEnrollPrepTimerBadge() {
       if (
         !kioskStarted ||
@@ -855,19 +959,11 @@
         return;
       }
       facePrepTimer.classList.remove('hidden');
-      const elapsed = Date.now() - faceEnrollPrepStartAt;
-      const remSec = Math.max(0, Math.ceil((FACE_ENROLL_PREP_MS - elapsed) / 1000));
-      if (remSec > 0) {
-        facePrepTimer.className =
-          'px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
-        facePrepTimer.textContent = `⏳ CHUẨN BỊ: ${remSec}s`;
-        camCountdown.textContent = 'ĐỦ 5/5 TỰ CHỤP';
-      } else {
-        facePrepTimer.className =
-          'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
-        facePrepTimer.textContent = '📸 CHỜ ĐỦ 5/5';
-        camCountdown.textContent = 'ĐỦ 5/5 TỰ CHỤP';
-      }
+      const currentPoseObj = ENROLL_POSES[currentEnrollPoseIndex] || ENROLL_POSES[0];
+      facePrepTimer.className =
+        'px-2.5 py-1 rounded-lg bg-sky-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
+      facePrepTimer.textContent = `🧭 GÓC ${currentEnrollPoseIndex + 1}/5`;
+      camCountdown.textContent = `${currentPoseObj.label.toUpperCase()} • ĐỦ 5/5 TỰ CHỤP`;
     }
 
     async function setVisualPhase(phase) {
@@ -877,6 +973,8 @@
       if (phase === 'voice') {
         clearLandmarkCanvas();
         if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
+        if (btnFinishEnrollAngles) btnFinishEnrollAngles.classList.add('hidden');
+        if (enrollAngleStepper) enrollAngleStepper.classList.add('hidden');
         voiceVisual.classList.remove('hidden');
         cameraVisual.classList.add('hidden');
         cameraVisual.classList.remove('flex');
@@ -890,6 +988,7 @@
         cameraVisual.classList.remove('hidden');
         cameraVisual.classList.add('flex');
         updateFaceGuideVisual('scanning');
+        updateEnrollAngleStepperUI();
         stepPillVoice.className =
           'rounded-xl py-2 px-3 border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 flex items-center justify-center gap-1.5';
         stepPillFace.className =
@@ -905,9 +1004,82 @@
 
     if (btnForceSnapFace) {
       btnForceSnapFace.addEventListener('click', async () => {
-        btnForceSnapFace.classList.add('hidden');
-        faceEnrollPrepStartAt = 0;
-        await processFaceStep();
+        if (!enrollInfo.active || isBusyUploading) return;
+        const currentPoseObj = ENROLL_POSES[currentEnrollPoseIndex] || ENROLL_POSES[0];
+        const frameBlob = await captureHighResFrameBlob();
+        if (!frameBlob) return;
+        isBusyUploading = true;
+        try {
+          const formData = new FormData();
+          formData.append('userId', enrollInfo.userId);
+          formData.append('image', frameBlob, 'manual_snap.jpg');
+          formData.append('pose', currentPoseObj.id);
+          const resp = await fetch(`${API_BASE}/api/biometrics/enroll-face`, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await resp.json();
+          renderFaceAlgorithmHud(data);
+          if (resp.ok && data.ok) {
+            triggerShutterFlash();
+            completedEnrollPoses.add(currentPoseObj.id);
+            if (data.isComplete || currentEnrollPoseIndex >= ENROLL_POSES.length - 1) {
+              currentEnrollPoseIndex = ENROLL_POSES.length;
+              updateEnrollAngleStepperUI();
+              speakPrompt(`Đã lưu toàn bộ góc khuôn mặt thành công cho ${enrollInfo.userName}!`);
+              enrollInfo.active = false;
+              enrollInfo.step = 'completed';
+              setTimeout(() => { void setVisualPhase('voice'); }, 1800);
+            } else {
+              currentEnrollPoseIndex++;
+              updateEnrollAngleStepperUI();
+              const nextPoseObj = ENROLL_POSES[currentEnrollPoseIndex];
+              speakPrompt(nextPoseObj.instruction);
+              cooldownUntil = Date.now() + 800;
+            }
+          } else {
+            statusDesc.textContent = data.detail || 'Khuôn mặt chưa đạt tiêu chuẩn để chụp. Vui lòng thử lại.';
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          isBusyUploading = false;
+        }
+      });
+    }
+
+    if (btnFinishEnrollAngles) {
+      btnFinishEnrollAngles.addEventListener('click', async () => {
+        if (!enrollInfo.active || completedEnrollPoses.size === 0 || isBusyUploading) return;
+        const frameBlob = await captureHighResFrameBlob();
+        if (!frameBlob) return;
+        isBusyUploading = true;
+        try {
+          const currentPoseObj = ENROLL_POSES[currentEnrollPoseIndex] || ENROLL_POSES[0];
+          const formData = new FormData();
+          formData.append('userId', enrollInfo.userId);
+          formData.append('image', frameBlob, 'force_finish.jpg');
+          formData.append('pose', currentPoseObj.id);
+          formData.append('forceComplete', 'true');
+          const resp = await fetch(`${API_BASE}/api/biometrics/enroll-face`, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await resp.json();
+          if (resp.ok && data.ok) {
+            triggerShutterFlash();
+            completedEnrollPoses.add(currentPoseObj.id);
+            updateEnrollAngleStepperUI();
+            speakPrompt(`Đã lưu ${completedEnrollPoses.size} góc khuôn mặt cho ${enrollInfo.userName} thành công!`);
+            enrollInfo.active = false;
+            enrollInfo.step = 'completed';
+            setTimeout(() => { void setVisualPhase('voice'); }, 1800);
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          isBusyUploading = false;
+        }
       });
     }
 
@@ -1114,15 +1286,13 @@
           enrollInfo.active &&
           enrollInfo.step === 'waiting_face'
         ) {
-          const elapsedPrep = Date.now() - faceEnrollPrepStartAt;
-          const remPrepSec = Math.max(
-            0,
-            Math.ceil((FACE_ENROLL_PREP_MS - elapsedPrep) / 1000)
-          );
+          const currentPoseObj = ENROLL_POSES[currentEnrollPoseIndex] || ENROLL_POSES[0];
+          const targetPose = currentPoseObj.id;
 
-          // Chạy 5 thuật toán kiểm tra khuôn mặt theo thời gian thực (YuNet DNN + Căn tâm + Kích thước + 5 điểm mốc + Độ nét)
+          // Chạy 5 thuật toán kiểm tra khuôn mặt theo góc hiện tại (YuNet DNN + Căn tâm + Kích thước + Góc quay + Độ nét)
           const checkForm = new FormData();
           checkForm.append('image', frameBlob, 'check_guide.jpg');
+          checkForm.append('targetPose', targetPose);
           const checkResp = await fetch(
             `${API_BASE}/api/biometrics/check-face-frame`,
             {
@@ -1133,16 +1303,16 @@
           const checkData = await checkResp.json();
           renderFaceAlgorithmHud(checkData);
 
-          // CỨ ĐỦ 5/5 KIỂM TRA KHUÔN MẶT LÀ TỰ ĐỘNG CHỤP & LƯU NGAY LẬP TỨC — KHÔNG CẦN CHỜ HẾT DELAY!
+          // CỨ ĐỦ 5/5 KIỂM TRA CHO GÓC HIỆN TẠI LÀ TỰ ĐỘNG CHỤP & LƯU NGAY
           if (checkData.aligned) {
-            updateFaceGuideVisual('aligned', '📸 ĐÃ ĐẠT 5/5 CHUẨN — TỰ ĐỘNG CHỤP!');
-            statusTitle.textContent = '📸 Đang tự động chụp & lưu khuôn mặt chuẩn HD...';
-            statusDesc.textContent =
-              'Đã đạt chuẩn 5/5 thuật toán! Đang gửi ảnh HD lên Server...';
+            updateFaceGuideVisual('aligned', `📸 ĐÃ ĐẠT GÓC ${currentPoseObj.label.toUpperCase()} — TỰ ĐỘNG CHỤP!`);
+            statusTitle.textContent = `📸 Đang lưu góc ${currentPoseObj.label}...`;
+            statusDesc.textContent = `Đã đạt chuẩn góc ${currentPoseObj.label}! Đang gửi ảnh HD lên Server...`;
 
             const formData = new FormData();
             formData.append('userId', enrollInfo.userId);
             formData.append('image', frameBlob, 'rear_cam_hd.jpg');
+            formData.append('pose', targetPose);
 
             const resp = await fetch(`${API_BASE}/api/biometrics/enroll-face`, {
               method: 'POST',
@@ -1153,43 +1323,53 @@
 
             if (resp.ok && data.ok) {
               triggerShutterFlash();
-              if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
-              updateFaceGuideVisual('aligned', '📸 ĐÃ TỰ ĐỘNG CHỤP & LƯU HD');
-              teleScores.textContent = `FaceNet: 512-D (${data.resolution?.width}x${data.resolution?.height})`;
-              statusTitle.textContent = `🎉 Đã tự động chụp & lưu Khuôn mặt cho ${enrollInfo.userName}!`;
-              statusDesc.textContent =
-                'Khuôn mặt đạt chuẩn 5/5 thuật toán đã được lưu lên Server.';
-              speakPrompt(
-                `Đã tự động chụp và lưu khuôn mặt chuẩn cho ${enrollInfo.userName} thành công.`
-              );
-              enrollInfo.active = false;
-              enrollInfo.step = 'completed';
-              setTimeout(() => {
-                void setVisualPhase('voice');
-              }, 1400);
+              completedEnrollPoses.add(targetPose);
+
+              if (data.isComplete || currentEnrollPoseIndex >= ENROLL_POSES.length - 1) {
+                // ĐÃ HOÀN TẤT TẤT CẢ 5 GÓC!
+                currentEnrollPoseIndex = ENROLL_POSES.length;
+                updateEnrollAngleStepperUI();
+                if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
+                if (btnFinishEnrollAngles) btnFinishEnrollAngles.classList.add('hidden');
+                updateFaceGuideVisual('aligned', '🎉 ĐÃ THU ĐỦ 5 GÓC KHUÔN MẶT');
+                teleScores.textContent = `SFace: 128-D Centroid (${data.resolution?.width || 1280}x${data.resolution?.height || 720})`;
+                statusTitle.textContent = `🎉 Đã lưu toàn bộ góc khuôn mặt cho ${enrollInfo.userName}!`;
+                statusDesc.textContent =
+                  'Đã thu thập đầy đủ 5 góc nhận diện (Chính diện, Trái, Phải, Ngẩng, Cúi).';
+                speakPrompt(
+                  `Đã lưu toàn bộ góc khuôn mặt thành công cho ${enrollInfo.userName}!`
+                );
+                enrollInfo.active = false;
+                enrollInfo.step = 'completed';
+                setTimeout(() => {
+                  void setVisualPhase('voice');
+                }, 2000);
+              } else {
+                // CHUYỂN SANG GÓC TIẾP THEO
+                currentEnrollPoseIndex++;
+                updateEnrollAngleStepperUI();
+                const nextPoseObj = ENROLL_POSES[currentEnrollPoseIndex];
+                statusTitle.textContent = `✅ Đã xong góc ${currentPoseObj.label} (${currentEnrollPoseIndex}/5)`;
+                statusDesc.textContent = nextPoseObj.instruction;
+                speakPrompt(nextPoseObj.instruction);
+                cooldownUntil = Date.now() + 800; // Cho người dùng 0.8s xoay mặt trước khi scan góc kế
+              }
             }
             return;
           }
 
-          // Khi chưa đạt đủ 5/5: Hướng dẫn người dùng căn chỉnh khuôn mặt vào khung mô hình
+          // Khi chưa đạt chuẩn góc hiện tại:
           updateFaceGuideVisual(
             'warning',
-            remPrepSec > 0
-              ? `⏳ CĂN CHỈNH: ${remPrepSec}s (CHỜ ĐẠT 5/5)`
-              : '⚠️ CHỜ ĐẠT ĐỦ 5/5 THUẬT TOÁN ĐỂ TỰ CHỤP'
+            `⏳ GÓC ${currentEnrollPoseIndex + 1}/5: ${currentPoseObj.label.toUpperCase()}`
           );
-          if (btnForceSnapFace) btnForceSnapFace.classList.remove('hidden');
-          if (remPrepSec > 0) {
-            statusTitle.textContent = `Còn ${remPrepSec}s chuẩn bị — Căn chỉnh vào mô hình`;
-            statusDesc.textContent =
-              checkData.detail ||
-              'Hãy di chuyển khuôn mặt vào chính giữa khung bầu dục — Cứ đạt đủ 5/5 chuẩn là hệ thống tự động chụp ngay!';
-          } else {
-            statusTitle.textContent = 'Đang chờ khuôn mặt đạt đủ 5/5 thuật toán để tự chụp';
-            statusDesc.textContent =
-              checkData.detail ||
-              'Hãy đặt khuôn mặt nằm gọn vào giữa khung bầu dục — Hệ thống sẽ tự động chụp ngay khi đạt 5/5 tiêu chí!';
+          if (btnForceSnapFace) {
+            btnForceSnapFace.classList.remove('hidden');
+            const spanEl = btnForceSnapFace.querySelector('span');
+            if (spanEl) spanEl.textContent = `📸 CHỤP GÓC ${currentPoseObj.label.toUpperCase()} NGAY`;
           }
+          statusTitle.textContent = `Góc ${currentEnrollPoseIndex + 1}/5: ${currentPoseObj.label}`;
+          statusDesc.textContent = checkData.detail || currentPoseObj.instruction;
           return;
         }
 
@@ -1376,16 +1556,15 @@
             }
           } else if (enrollInfo.step === 'waiting_face') {
             if (prevMode !== 'enroll' || prevStep !== 'waiting_face') {
-              // Khởi tạo đếm ngược 10 giây chuẩn bị khuôn mặt
+              currentEnrollPoseIndex = 0;
+              completedEnrollPoses.clear();
               faceEnrollPrepStartAt = Date.now();
               await setVisualPhase('face');
+              updateEnrollAngleStepperUI();
               updateEnrollPrepTimerBadge();
-              statusTitle.textContent = `Căn chỉnh Khuôn mặt (10s): ${enrollInfo.userName}`;
-              statusDesc.textContent =
-                'Hãy đặt khuôn mặt vào đúng KHUNG MÔ HÌNH BẦU DỤC trên màn hình. Hệ thống sẽ chụp sau 10 giây...';
-              speakPrompt(
-                `Mời ${enrollInfo.userName} đặt khuôn mặt vào đúng khung mô hình trên màn hình. Chụp sau 10 giây.`
-              );
+              statusTitle.textContent = `Góc 1/5 (Chính diện): ${enrollInfo.userName}`;
+              statusDesc.textContent = 'Vui lòng nhìn thẳng vào camera';
+              speakPrompt('Vui lòng nhìn thẳng vào camera');
             }
           }
         } else {
@@ -1398,6 +1577,9 @@
             : 'text-rose-400 font-bold';
 
           if (prevMode === 'enroll') {
+            currentEnrollPoseIndex = 0;
+            completedEnrollPoses.clear();
+            updateEnrollAngleStepperUI();
             await setVisualPhase('voice');
             statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
             statusDesc.textContent =

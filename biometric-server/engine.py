@@ -572,7 +572,7 @@ class BiometricEngine:
     # XỬ LÝ ẢNH CAMERA SAU ĐỘ PHÂN GIẢI CAO & 5 THUẬT TOÁN KIỂM TRA KHUÔN MẶT CHUẨN
     # =========================================================================
     def evaluate_face_frame(
-        self, img: Image.Image
+        self, img: Image.Image, target_pose: str = "center"
     ) -> Tuple[Image.Image | None, Dict[str, object]]:
         """
         Thực thi đồng thời 5 Thuật toán Kiểm tra Khuôn mặt Đạt chuẩn (trả về chi tiết từng thuật toán
@@ -580,7 +580,7 @@ class BiometricEngine:
         1. YuNet DNN Face & 5-Landmark Detection (Phát hiện khuôn mặt & 5 điểm mốc mắt-mũi-miệng).
         2. Oval Model Center Alignment (Kiểm tra tâm khuôn mặt nằm trong khung mô hình bầu dục).
         3. Biometric Scale & Distance Ratio (Kiểm tra tỷ lệ khuôn mặt / khoảng cách 25-40cm).
-        4. 5-Landmark 3D Frontal Pose (Kiểm tra góc nghiêng mắt & đối xứng sống mũi trực diện).
+        4. 5-Landmark 3D Pose Checking theo target_pose ("center", "left", "right", "up", "down").
         5. Luma Brightness & Laplacian Sharpness (Kiểm tra ánh sáng & độ sắc nét chống rung mờ).
         """
         width, height = img.size
@@ -838,10 +838,12 @@ class BiometricEngine:
         else:
             val_size = f"Đạt chuẩn ({int(size_ratio * 100)}% khung)"
 
-        # --- THUẬT TOÁN 4: Kiểm tra tư thế nhìn thẳng bằng 5 Điểm mốc (Roll & Yaw) ---
+        # --- THUẬT TOÁN 4: Kiểm tra tư thế đầu (Pose) theo target_pose ---
         re_x, re_y = landmarks_norm[0]
         le_x, le_y = landmarks_norm[1]
-        nt_x, _ = landmarks_norm[2]
+        nt_x, nt_y = landmarks_norm[2]
+        rm_x, rm_y = landmarks_norm[3]
+        lm_x, lm_y = landmarks_norm[4]
         eye_dx = abs(le_x - re_x)
         eye_dy = abs(le_y - re_y)
         roll_deg = (
@@ -850,20 +852,96 @@ class BiometricEngine:
             else 0.0
         )
         eye_mid_x = 0.5 * (re_x + le_x)
-        yaw_asym = abs(nt_x - eye_mid_x) / max(eye_dx, 0.04)
+        eye_mid_y = 0.5 * (re_y + le_y)
+        mouth_mid_y = 0.5 * (rm_y + lm_y)
+        face_vert = max(mouth_mid_y - eye_mid_y, 0.04)
+
+        # Yaw signed: (nt_x - eye_mid_x) / eye_dx
+        # nt_x lệch sang phải ảnh (tai trái người dùng) -> yaw > 0 (Quay Trái)
+        # nt_x lệch sang trái ảnh (tai phải người dùng) -> yaw < 0 (Quay Phải)
+        yaw_metric = float((nt_x - eye_mid_x) / max(eye_dx, 0.04))
+
+        # Pitch metric: tỷ lệ độ cao mũi giữa trục mắt và trục miệng
+        # Mũi nhích lên trục mắt -> pitch < 0.38 (Ngẩng lên)
+        # Mũi chúc xuống trục miệng -> pitch > 0.62 (Cúi xuống)
+        pitch_metric = float((nt_y - eye_mid_y) / face_vert)
 
         pass_pose = True
         pose_reason = ""
-        if roll_deg > 28.0:
+        pose_key = (target_pose or "center").strip().lower()
+
+        if roll_deg > 30.0:
             pass_pose = False
-            pose_reason = f"Đầu đang nghiêng ({round(roll_deg, 1)}°). Hãy giữ đầu thẳng trong khung mô hình."
-            val_pose = f"Nghiêng {round(roll_deg, 1)}° (>28°)"
-        elif yaw_asym > 0.55:
-            pass_pose = False
-            pose_reason = "Khuôn mặt đang quay nghiêng. Hãy nhìn thẳng trực diện vào camera sau."
-            val_pose = "Đang quay nghiêng mặt"
-        else:
-            val_pose = f"Trực diện (Góc {round(roll_deg, 1)}°)"
+            pose_reason = f"Đầu đang nghiêng ({round(roll_deg, 1)}°). Hãy giữ đầu thẳng không nghiêng cổ."
+            val_pose = f"Nghiêng cổ {round(roll_deg, 1)}° (>30°)"
+            pose_name = "4. Tư thế khuôn mặt"
+        elif pose_key in ("center", "straight"):
+            pose_name = "4. Tư thế nhìn thẳng"
+            if abs(yaw_metric) > 0.22:
+                pass_pose = False
+                pose_reason = "Khuôn mặt đang quay nghiêng. Hãy nhìn thẳng trực diện vào camera sau."
+                val_pose = f"Quay nghiêng (Yaw {yaw_metric:+.2f})"
+            elif pitch_metric < 0.38:
+                pass_pose = False
+                pose_reason = "Đầu đang ngẩng cao. Hãy nhìn thẳng trực diện vào camera sau."
+                val_pose = f"Đang ngẩng (Pitch {pitch_metric:.2f})"
+            elif pitch_metric > 0.62:
+                pass_pose = False
+                pose_reason = "Đầu đang cúi thấp. Hãy nhìn thẳng trực diện vào camera sau."
+                val_pose = f"Đang cúi (Pitch {pitch_metric:.2f})"
+            else:
+                val_pose = f"Trực diện (Góc {round(roll_deg, 1)}°)"
+        elif pose_key == "left":
+            pose_name = "4. Góc quay sang Trái"
+            if yaw_metric < 0.16:
+                pass_pose = False
+                pose_reason = "Hãy quay mặt nhẹ sang TRÁI (khoảng 20°)."
+                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} < +0.16)"
+            elif pitch_metric < 0.32 or pitch_metric > 0.68:
+                pass_pose = False
+                pose_reason = "Hãy giữ độ cao đầu vừa phải khi quay sang TRÁI."
+                val_pose = f"Lệch ngẩng/cúi ({pitch_metric:.2f})"
+            else:
+                val_pose = f"Đạt góc Trái (Yaw {yaw_metric:+.2f})"
+        elif pose_key == "right":
+            pose_name = "4. Góc quay sang Phải"
+            if yaw_metric > -0.16:
+                pass_pose = False
+                pose_reason = "Hãy quay mặt nhẹ sang PHẢI (khoảng 20°)."
+                val_pose = f"Chưa đủ góc (Yaw {yaw_metric:+.2f} > -0.16)"
+            elif pitch_metric < 0.32 or pitch_metric > 0.68:
+                pass_pose = False
+                pose_reason = "Hãy giữ độ cao đầu vừa phải khi quay sang PHẢI."
+                val_pose = f"Lệch ngẩng/cúi ({pitch_metric:.2f})"
+            else:
+                val_pose = f"Đạt góc Phải (Yaw {yaw_metric:+.2f})"
+        elif pose_key == "up":
+            pose_name = "4. Góc ngẩng Lên trên"
+            if pitch_metric > 0.38:
+                pass_pose = False
+                pose_reason = "Hãy ngẩng nhẹ đầu LÊN TRÊN (khoảng 15°–25°)."
+                val_pose = f"Chưa đủ ngẩng (Pitch {pitch_metric:.2f} > 0.38)"
+            elif abs(yaw_metric) > 0.28:
+                pass_pose = False
+                pose_reason = "Hãy giữ mặt ở giữa khi ngẩng đầu lên trên."
+                val_pose = f"Lệch quay ngang ({yaw_metric:+.2f})"
+            else:
+                val_pose = f"Đạt góc Ngẩng (Pitch {pitch_metric:.2f})"
+        elif pose_key == "down":
+            pose_name = "4. Góc cúi Xuống dưới"
+            if pitch_metric < 0.62:
+                pass_pose = False
+                pose_reason = "Hãy cúi nhẹ đầu XUỐNG DƯỚI (khoảng 15°–25°)."
+                val_pose = f"Chưa đủ cúi (Pitch {pitch_metric:.2f} < 0.62)"
+            elif abs(yaw_metric) > 0.28:
+                pass_pose = False
+                pose_reason = "Hãy giữ mặt ở giữa khi cúi đầu xuống dưới."
+                val_pose = f"Lệch quay ngang ({yaw_metric:+.2f})"
+            else:
+                val_pose = f"Đạt góc Cúi (Pitch {pitch_metric:.2f})"
+        else:  # "any"
+            pose_name = "4. Tư thế khuôn mặt"
+            val_pose = f"Hợp lệ (Yaw {yaw_metric:+.2f} | Pitch {pitch_metric:.2f})"
 
         # --- THUẬT TOÁN 5: Kiểm tra Độ sáng Luma & Độ sắc nét Laplacian ---
         x0 = max(0, x)
@@ -916,7 +994,7 @@ class BiometricEngine:
             },
             {
                 "id": "frontal_pose",
-                "name": "4. Tư thế nhìn thẳng (5 điểm mốc)",
+                "name": pose_name,
                 "passed": pass_pose,
                 "value": val_pose,
             },
@@ -932,12 +1010,21 @@ class BiometricEngine:
             pass_detect and pass_center and pass_size and pass_pose and pass_quality
         )
         if aligned:
-            detail_msg = "✅ Đạt chuẩn 5/5 thuật toán sinh trắc học! Giữ yên khuôn mặt..."
+            pose_labels = {
+                "center": "Chính diện (nhìn thẳng)",
+                "straight": "Chính diện (nhìn thẳng)",
+                "left": "Quay sang Trái",
+                "right": "Quay sang Phải",
+                "up": "Ngẩng lên Trên",
+                "down": "Cúi xuống Dưới",
+            }
+            lbl = pose_labels.get(pose_key, "Đa góc")
+            detail_msg = f"✅ Đạt chuẩn góc {lbl}! Giữ yên để chụp..."
         else:
             detail_msg = (
-                center_reason
+                pose_reason
+                or center_reason
                 or size_reason
-                or pose_reason
                 or quality_reason
                 or "Hãy đặt khuôn mặt khớp vào khung mô hình bầu dục."
             )
@@ -962,6 +1049,9 @@ class BiometricEngine:
             "cy": round(cy, 3),
             "sizeRatio": round(size_ratio, 3),
             "rollAngle": round(roll_deg, 1),
+            "targetPose": pose_key,
+            "yaw": round(yaw_metric, 3),
+            "pitch": round(pitch_metric, 3),
             "brightness": round(mean_luma, 1),
             "sharpness": round(lap_var, 1),
             "bbox": bbox_norm,
@@ -973,10 +1063,10 @@ class BiometricEngine:
         return face_crop_pil, meta
 
     def _validate_and_crop_face_in_guide(
-        self, img: Image.Image
+        self, img: Image.Image, target_pose: str = "center"
     ) -> Tuple[Image.Image, Dict[str, object]]:
         """Kiểm tra khuôn mặt đạt đủ 5 thuật toán chuẩn trước khi trích xuất vector 512-D / 128-D."""
-        face_crop_pil, meta = self.evaluate_face_frame(img)
+        face_crop_pil, meta = self.evaluate_face_frame(img, target_pose=target_pose)
         if not meta.get("aligned") or face_crop_pil is None:
             meta.pop("orig_detected_row", None)
             meta.pop("bgr_full", None)
@@ -985,17 +1075,22 @@ class BiometricEngine:
             raise err
         return face_crop_pil, meta
 
-    def check_face_guide(self, image_bytes: bytes) -> Dict[str, object]:
+    def check_face_guide(
+        self, image_bytes: bytes, target_pose: str = "center"
+    ) -> Dict[str, object]:
         """Trả về toàn bộ trạng thái 5 thuật toán kiểm tra khuôn mặt + 5 điểm mốc theo thời gian thực."""
         img = Image.open(io.BytesIO(image_bytes))
         img = ImageOps.exif_transpose(img).convert("RGB")
-        _, meta = self.evaluate_face_frame(img)
+        _, meta = self.evaluate_face_frame(img, target_pose=target_pose)
         meta.pop("orig_detected_row", None)
         meta.pop("bgr_full", None)
         return meta
 
     def extract_face_embedding(
-        self, image_bytes: bytes, target_dim: Optional[int] = None
+        self,
+        image_bytes: bytes,
+        target_dim: Optional[int] = None,
+        target_pose: str = "center",
     ) -> Tuple[List[float], Dict[str, object]]:
         """
         Nhận ảnh chụp từ Camera sau của điện thoại (độ phân giải cao),
@@ -1009,7 +1104,7 @@ class BiometricEngine:
         width, height = img.size
 
         # Bước 1: Kiểm tra khuôn mặt đã đạt 5 thuật toán chuẩn hay chưa
-        face_crop_pil, meta = self._validate_and_crop_face_in_guide(img)
+        face_crop_pil, meta = self._validate_and_crop_face_in_guide(img, target_pose=target_pose)
         orig_row = meta.pop("orig_detected_row", None)
         bgr_full = meta.pop("bgr_full", None)
 

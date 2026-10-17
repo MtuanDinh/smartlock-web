@@ -133,6 +133,8 @@ describe('userMutations builders', () => {
     expect(buildClearBiometricUpdates('user_1', 'face')).toEqual({
       'SmartLock/Users/user_1/hasFace': false,
       'SmartLock/Biometrics/user_1/faceEmbedding': null,
+      'SmartLock/Biometrics/user_1/faceEmbeddings': null,
+      'SmartLock/Biometrics/user_1/faceAnglesCount': null,
     });
   });
 });

@@ -30,11 +30,13 @@ import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+import numpy as np
 
 from engine import (
     BiometricEngine,
     compute_phrase_similarity,
     cosine_similarity,
+    l2_normalize,
     normalize_vietnamese_phrase,
 )
 
@@ -164,6 +166,17 @@ app.add_middleware(
 
 VOICE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 SESSION_TTL_SECONDS = 35.0
+
+# Lưu trữ tạm các góc khuôn mặt trong phiên đăng ký multi-angle
+FACE_ENROLL_SESSIONS: Dict[str, Dict[str, List[float]]] = {}
+ALL_ENROLL_POSES = ["center", "left", "right", "up", "down"]
+POSE_LABELS_VI = {
+    "center": "Chính diện",
+    "left": "Quay Trái",
+    "right": "Quay Phải",
+    "up": "Ngẩng Lên",
+    "down": "Cúi Xuống",
+}
 
 
 def fb_get(path: str) -> Any:
@@ -452,19 +465,28 @@ async def enroll_voice_from_phone(
 @app.post("/api/biometrics/check-face-frame")
 async def check_face_frame_alignment(
     image: UploadFile = File(...),
+    targetPose: Optional[str] = Form("center"),
 ) -> JSONResponse:
     """
-    Kiểm tra trực tiếp theo thời gian thực (trong lúc đếm ngược 10s) toàn bộ 5 thuật toán
-    khuôn mặt đạt chuẩn (YuNet DNN + Căn tâm + Khoảng cách + Tư thế 5 điểm mốc + Độ sáng/nét).
+    Kiểm tra trực tiếp theo thời gian thực toàn bộ 5 thuật toán khuôn mặt đạt chuẩn
+    với hướng quay đầu mục tiêu targetPose (center, left, right, up, down, any).
     """
+    pose_key = (targetPose or "center").strip().lower()
+    if pose_key == "straight":
+        pose_key = "center"
+    if pose_key not in ALL_ENROLL_POSES and pose_key != "any":
+        pose_key = "center"
+
     image_bytes = await image.read()
     try:
-        meta = engine.check_face_guide(image_bytes)
+        meta = engine.check_face_guide(image_bytes, target_pose=pose_key)
         aligned = bool(meta.get("aligned", False))
         return JSONResponse(
             content={
                 "ok": aligned,
                 "aligned": aligned,
+                "targetPose": pose_key,
+                "targetPoseLabel": POSE_LABELS_VI.get(pose_key, pose_key),
                 "meta": meta,
                 "checks": meta.get("checks", []),
                 "bbox": meta.get("bbox"),
@@ -472,7 +494,7 @@ async def check_face_frame_alignment(
                 "detail": str(
                     meta.get("detail")
                     or (
-                        "✅ Đạt chuẩn 5/5 thuật toán sinh trắc học! Giữ yên khuôn mặt..."
+                        f"✅ Đạt chuẩn góc {POSE_LABELS_VI.get(pose_key, 'khuôn mặt')}! Giữ yên để chụp..."
                         if aligned
                         else "Hãy đặt khuôn mặt khớp vào khung mô hình bầu dục."
                     )
@@ -485,6 +507,7 @@ async def check_face_frame_alignment(
             content={
                 "ok": False,
                 "aligned": False,
+                "targetPose": pose_key,
                 "checks": [],
                 "bbox": None,
                 "landmarks": [],
@@ -493,15 +516,29 @@ async def check_face_frame_alignment(
         )
 
 
+@app.post("/api/biometrics/reset-enroll-session")
+def reset_enroll_session(userId: Optional[str] = Form(None)) -> JSONResponse:
+    """Xóa bỏ phiên lưu tạm multi-angle để bắt đầu lại từ đầu."""
+    if userId:
+        FACE_ENROLL_SESSIONS.pop(userId.strip(), None)
+    else:
+        FACE_ENROLL_SESSIONS.clear()
+    return JSONResponse(content={"ok": True})
+
+
 @app.post("/api/biometrics/enroll-face")
 async def enroll_face_from_phone(
     image: UploadFile = File(...),
     userId: Optional[str] = Form(None),
+    pose: Optional[str] = Form("center"),
+    forceComplete: Optional[bool] = Form(False),
+    resetSession: Optional[bool] = Form(False),
 ) -> JSONResponse:
     """
     Lưu khuôn mặt từ Camera sau HD lên Server:
-    - Chờ đủ thời gian chuẩn bị để người dùng kịp căn chỉnh khuôn mặt vào khung mô hình.
-    - Bắt buộc khuôn mặt phải đạt cả 5 thuật toán kiểm tra chuẩn (YuNet 5-Landmark + Căn tâm + Tỷ lệ + Trực diện + Độ nét).
+    - Hỗ trợ lưu tuần tự 5 góc khuôn mặt (Chính diện, Trái, Phải, Ngẩng, Cúi).
+    - Tính toán vector trung bình chuẩn hóa L2 (128-D) làm centroid `faceEmbedding` để tương thích 100% ngược.
+    - Lưu toàn bộ dictionary 5 vector vào `faceEmbeddings` để nhận diện góc xiên cực nhạy ở Bước 2.
     """
     enroll = fb_get("SmartLock/Control/Biometric_Enroll") or {}
     target_user_id = (userId or str(enroll.get("userId", ""))).strip()
@@ -512,11 +549,22 @@ async def enroll_face_from_phone(
             status_code=400, detail="Không xác định được thành viên cần chụp khuôn mặt."
         )
 
+    pose_key = (pose or "center").strip().lower()
+    if pose_key == "straight":
+        pose_key = "center"
+    if pose_key not in ALL_ENROLL_POSES:
+        pose_key = "center"
+
+    if resetSession:
+        FACE_ENROLL_SESSIONS.pop(target_user_id, None)
+
     image_bytes = await image.read()
     now_ms = int(time.time() * 1000)
 
     try:
-        face_emb, face_meta = engine.extract_face_embedding(image_bytes)
+        face_emb, face_meta = engine.extract_face_embedding(
+            image_bytes, target_pose=pose_key
+        )
     except ValueError as exc:
         fail_meta = getattr(exc, "face_meta", {}) or {}
         return JSONResponse(
@@ -525,6 +573,7 @@ async def enroll_face_from_phone(
                 "ok": False,
                 "countingDown": False,
                 "aligned": False,
+                "pose": pose_key,
                 "meta": fail_meta,
                 "checks": fail_meta.get("checks", []),
                 "bbox": fail_meta.get("bbox"),
@@ -536,37 +585,105 @@ async def enroll_face_from_phone(
     w_res = int(face_meta.get("width", 1280))
     h_res = int(face_meta.get("height", 720))
 
-    fb_patch(
-        f"SmartLock/Biometrics/{target_user_id}",
-        {
-            "faceEmbedding": face_emb,
-            "faceResolution": f"{w_res}x{h_res}",
-            "updatedAt": now_ms,
-        },
-    )
-    fb_patch(
-        f"SmartLock/Users/{target_user_id}",
-        {
-            "hasFace": True,
-            "biometricUpdatedAt": now_ms,
-        },
-    )
+    # Cập nhật vào session tạm thời
+    if target_user_id not in FACE_ENROLL_SESSIONS:
+        FACE_ENROLL_SESSIONS[target_user_id] = {}
+    FACE_ENROLL_SESSIONS[target_user_id][pose_key] = face_emb
+
+    completed_poses = [p for p in ALL_ENROLL_POSES if p in FACE_ENROLL_SESSIONS[target_user_id]]
+    is_finished = (len(completed_poses) >= len(ALL_ENROLL_POSES)) or bool(forceComplete)
+
+    if is_finished:
+        # Gom toàn bộ các vector đã thu thập để tính centroid vector L2-normalized
+        vectors_to_average = [FACE_ENROLL_SESSIONS[target_user_id][p] for p in completed_poses]
+        if not vectors_to_average:
+            vectors_to_average = [face_emb]
+
+        mean_vec = np.mean(vectors_to_average, axis=0)
+        centroid_emb = l2_normalize(mean_vec)
+        all_angle_dict = dict(FACE_ENROLL_SESSIONS[target_user_id])
+
+        fb_patch(
+            f"SmartLock/Biometrics/{target_user_id}",
+            {
+                "faceEmbedding": centroid_emb,
+                "faceEmbeddings": all_angle_dict,
+                "faceAnglesCount": len(completed_poses),
+                "faceResolution": f"{w_res}x{h_res}",
+                "updatedAt": now_ms,
+            },
+        )
+        fb_patch(
+            f"SmartLock/Users/{target_user_id}",
+            {
+                "hasFace": True,
+                "biometricUpdatedAt": now_ms,
+            },
+        )
+
+        if enroll.get("active") and str(enroll.get("userId")) == target_user_id:
+            fb_patch(
+                "SmartLock/Control/Biometric_Enroll",
+                {
+                    "active": False,
+                    "step": "completed",
+                    "message": f"Đã lưu toàn bộ {len(completed_poses)} góc khuôn mặt chuẩn HD cho {target_user_name} thành công!",
+                    "updatedAt": now_ms,
+                },
+            )
+
+        FACE_ENROLL_SESSIONS.pop(target_user_id, None)
+
+        logger.info(
+            "Enrolled all %d face angles HD (%dx%d) for user=%s (%s)",
+            len(completed_poses),
+            w_res,
+            h_res,
+            target_user_id,
+            target_user_name,
+        )
+
+        return JSONResponse(
+            content={
+                "ok": True,
+                "userId": target_user_id,
+                "aligned": True,
+                "pose": pose_key,
+                "completedPoses": completed_poses,
+                "posesCount": len(completed_poses),
+                "totalPoses": len(ALL_ENROLL_POSES),
+                "isComplete": True,
+                "nextPose": None,
+                "embeddingDim": len(centroid_emb),
+                "resolution": {"width": w_res, "height": h_res},
+                "checks": face_meta.get("checks", []),
+                "bbox": face_meta.get("bbox"),
+                "landmarks": face_meta.get("landmarks", []),
+                "nextStep": "completed",
+            }
+        )
+
+    # Chưa hoàn tất: Tìm góc tiếp theo chưa thu
+    next_pose = None
+    for p in ALL_ENROLL_POSES:
+        if p not in completed_poses:
+            next_pose = p
+            break
 
     if enroll.get("active") and str(enroll.get("userId")) == target_user_id:
         fb_patch(
             "SmartLock/Control/Biometric_Enroll",
             {
-                "active": False,
-                "step": "completed",
-                "message": f"Đã lưu khuôn mặt chuẩn HD ({w_res}x{h_res}) cho {target_user_name} thành công!",
+                "message": f"Đã lưu góc {POSE_LABELS_VI.get(pose_key, pose_key)} ({len(completed_poses)}/5). Tiếp tục quay góc tiếp theo...",
                 "updatedAt": now_ms,
             },
         )
 
     logger.info(
-        "Enrolled face HD (%dx%d) for user=%s (%s)",
-        w_res,
-        h_res,
+        "Enrolled face angle '%s' (%d/%d) for user=%s (%s)",
+        pose_key,
+        len(completed_poses),
+        len(ALL_ENROLL_POSES),
         target_user_id,
         target_user_name,
     )
@@ -576,12 +693,19 @@ async def enroll_face_from_phone(
             "ok": True,
             "userId": target_user_id,
             "aligned": True,
+            "pose": pose_key,
+            "completedPoses": completed_poses,
+            "posesCount": len(completed_poses),
+            "totalPoses": len(ALL_ENROLL_POSES),
+            "isComplete": False,
+            "nextPose": next_pose,
+            "nextPoseLabel": POSE_LABELS_VI.get(next_pose, next_pose) if next_pose else None,
             "embeddingDim": len(face_emb),
             "resolution": {"width": w_res, "height": h_res},
             "checks": face_meta.get("checks", []),
             "bbox": face_meta.get("bbox"),
             "landmarks": face_meta.get("landmarks", []),
-            "nextStep": "completed",
+            "nextStep": "face",
         }
     )
 
@@ -783,11 +907,14 @@ async def verify_face_step2(
 
     user_bio = fb_get(f"SmartLock/Biometrics/{user_id}") or {}
     saved_face = user_bio.get("faceEmbedding")
+    saved_angles = user_bio.get("faceEmbeddings") or {}
     target_dim = len(saved_face) if isinstance(saved_face, list) and len(saved_face) in (128, 512) else None
 
     image_bytes = await image.read()
     try:
-        probe_face, face_meta = engine.extract_face_embedding(image_bytes, target_dim=target_dim)
+        probe_face, face_meta = engine.extract_face_embedding(
+            image_bytes, target_dim=target_dim, target_pose="any"
+        )
     except ValueError as exc:
         fail_meta = getattr(exc, "face_meta", {}) or {}
         return JSONResponse(
@@ -827,7 +954,27 @@ async def verify_face_step2(
     session["matchAttempts"] = attempts
     elapsed_matching = now_ts - float(first_aligned)
 
-    face_score = cosine_similarity(probe_face, saved_face)
+    # Đối chiếu probe_face với centroid_face và toàn bộ 5 góc đã lưu
+    angle_scores: Dict[str, float] = {}
+    if isinstance(saved_angles, dict):
+        for ang_key, ang_vec in saved_angles.items():
+            if isinstance(ang_vec, list) and len(ang_vec) == len(probe_face):
+                angle_scores[ang_key] = cosine_similarity(probe_face, ang_vec)
+
+    centroid_score = (
+        cosine_similarity(probe_face, saved_face)
+        if isinstance(saved_face, list) and len(saved_face) == len(probe_face)
+        else 0.0
+    )
+
+    max_angle_score = max(angle_scores.values()) if angle_scores else 0.0
+    face_score = max(centroid_score, max_angle_score)
+    matched_angle = (
+        max(angle_scores, key=angle_scores.get)
+        if (angle_scores and max_angle_score >= centroid_score)
+        else "centroid"
+    )
+
     best_score = max(float(session.get("bestFaceScore", 0.0)), face_score)
     session["bestFaceScore"] = best_score
 
@@ -856,10 +1003,11 @@ async def verify_face_step2(
         )
 
         logger.info(
-            "Face MATCHED user=%s (%s): score=%.3f >= threshold=%.2f in %.1fs (%d attempts)",
+            "Face MATCHED user=%s (%s): score=%.3f (angle=%s) >= threshold=%.2f in %.1fs (%d attempts)",
             user_id,
             user_name,
             face_score,
+            matched_angle,
             threshold,
             elapsed_matching,
             attempts,
@@ -876,6 +1024,7 @@ async def verify_face_step2(
                 "voiceScore": session.get("voiceScore"),
                 "phraseScore": session.get("phraseScore"),
                 "faceScore": round(face_score, 3),
+                "matchedAngle": matched_angle,
                 "threshold": round(threshold, 2),
                 "checks": face_meta.get("checks", []),
                 "bbox": face_meta.get("bbox"),
