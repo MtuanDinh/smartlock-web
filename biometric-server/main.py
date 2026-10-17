@@ -188,7 +188,15 @@ def serve_phone_kiosk() -> FileResponse:
     kiosk_path = BASE_DIR / "static" / "kiosk.html"
     if not kiosk_path.exists():
         raise HTTPException(status_code=404, detail="Kiosk UI file not found.")
-    return FileResponse(kiosk_path, media_type="text/html")
+    return FileResponse(
+        kiosk_path,
+        media_type="text/html",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @app.get("/api/biometrics/status")
@@ -409,13 +417,22 @@ async def enroll_face_from_phone(
             status_code=400, detail="Không xác định được thành viên cần chụp khuôn mặt."
         )
 
+    now_ms = int(time.time() * 1000)
+    step_updated_ms = int(enroll.get("updatedAt", 0) or 0)
+    if step_updated_ms > 0 and (now_ms - step_updated_ms) < 2200:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "detail": f"Đang lấy nét Camera sau HD cho {target_user_name}, vui lòng giữ khuôn mặt trước camera...",
+            },
+        )
+
     image_bytes = await image.read()
     try:
         face_emb, resolution = engine.extract_face_embedding(image_bytes)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"ok": False, "detail": str(exc)})
-
-    now_ms = int(time.time() * 1000)
 
     fb_patch(
         f"SmartLock/Biometrics/{target_user_id}",
@@ -706,7 +723,57 @@ async def verify_face_step2(
     )
 
 
+def _free_port_if_in_use(port: int) -> None:
+    """
+    Tự động giải phóng cổng (8000 / 8443) nếu có tiến trình cũ đang chiếm giữ,
+    tránh hoàn toàn lỗi OSError [Errno 10048] khi khởi động lại server.
+    """
+    import subprocess
+
+    my_pid = os.getpid()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.3)
+            if s.connect_ex(("127.0.0.1", port)) != 0:
+                return
+    except Exception:
+        return
+
+    try:
+        out = subprocess.check_output(
+            ["netstat", "-ano", "-p", "TCP"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        pids_to_kill = set()
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 5 and "LISTENING" in parts[3].upper():
+                local_addr = parts[1]
+                if local_addr.endswith(f":{port}"):
+                    try:
+                        pid = int(parts[4])
+                        if pid > 0 and pid != my_pid:
+                            pids_to_kill.add(pid)
+                    except ValueError:
+                        pass
+        for pid in pids_to_kill:
+            logger.info("Releasing port %d from previous process PID=%d...", port, pid)
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        if pids_to_kill:
+            time.sleep(0.4)
+    except Exception as exc:
+        logger.warning("Could not auto-free port %d: %s", port, exc)
+
+
 async def _serve_dual_http_and_https() -> None:
+    _free_port_if_in_use(8000)
+    _free_port_if_in_use(8443)
+
     lan_ip = _get_lan_ip()
     has_ssl = ensure_self_signed_ssl_cert(lan_ip)
 
@@ -728,10 +795,25 @@ async def _serve_dual_http_and_https() -> None:
             lan_ip,
             lan_ip,
         )
-        await asyncio.gather(http_server.serve(), https_server.serve())
+        tasks = [
+            asyncio.create_task(http_server.serve()),
+            asyncio.create_task(https_server.serve()),
+        ]
+        try:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        except (KeyboardInterrupt, asyncio.CancelledError, SystemExit):
+            for t in tasks:
+                t.cancel()
     else:
-        await http_server.serve()
+        try:
+            await http_server.serve()
+        except (KeyboardInterrupt, asyncio.CancelledError, SystemExit):
+            pass
 
 
 if __name__ == "__main__":
-    asyncio.run(_serve_dual_http_and_https())
+    try:
+        asyncio.run(_serve_dual_http_and_https())
+    except (KeyboardInterrupt, SystemExit):
+        pass
+

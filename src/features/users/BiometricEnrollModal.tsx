@@ -44,31 +44,15 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
   onClearBiometrics,
 }) => {
   const { mockControls } = useSystemStatus();
-  const [secondsLeft, setSecondsLeft] = useState(60);
+  const [secondsLeft, setSecondsLeft] = useState(120);
 
   const isEnrollingThisUser =
     enrollState.active && Boolean(user && enrollState.userId === user.id);
 
-  // Tự động đóng modal khi điện thoại thu mẫu hoàn tất
-  useEffect(() => {
-    if (
-      open &&
-      user &&
-      !enrollState.active &&
-      enrollState.step === 'completed' &&
-      enrollState.userId === user.id
-    ) {
-      const timer = setTimeout(() => {
-        onOpenChange(false);
-      }, 900);
-      return () => clearTimeout(timer);
-    }
-  }, [open, user, enrollState, onOpenChange]);
-
-  // Đếm ngược 60s khi đang chờ thu mẫu trên điện thoại
+  // Đếm ngược 120s khi đang chờ thu mẫu trên điện thoại
   useEffect(() => {
     if (!isEnrollingThisUser) {
-      setSecondsLeft(60);
+      setSecondsLeft(120);
       return;
     }
     const id = setInterval(() => {

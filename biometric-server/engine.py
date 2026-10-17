@@ -404,7 +404,8 @@ class BiometricEngine:
     def extract_face_embedding(self, image_bytes: bytes) -> Tuple[List[float], Dict[str, int]]:
         """
         Nhận ảnh chụp từ Camera sau của điện thoại (độ phân giải cao),
-        chuẩn hóa hướng EXIF, phát hiện khuôn mặt và trích xuất vector 512 chiều (L2-normalized).
+        chuẩn hóa hướng EXIF, phát hiện khuôn mặt thực tế (MTCNN hoặc OpenCV Cascade)
+        và trích xuất vector 512 chiều (L2-normalized).
         """
         img = Image.open(io.BytesIO(image_bytes))
         img = ImageOps.exif_transpose(img).convert("RGB")
@@ -427,16 +428,66 @@ class BiometricEngine:
                 emb = self.facenet(face_tensor).squeeze().cpu().numpy()
             return l2_normalize(emb), {"width": width, "height": height}
 
-        # Fallback: Cắt vùng trung tâm khuôn mặt từ ảnh HD camera sau & trích xuất 512-D Spatial/Gradient Descriptor
-        min_side = min(width, height)
-        crop_size = int(min_side * 0.72)
-        left = (width - crop_size) // 2
-        top = (height - crop_size) // 2
-        face_crop = img.crop((left, top, left + crop_size, top + crop_size)).resize(
-            (64, 64), Image.Resampling.BICUBIC
-        )
-        arr = np.asarray(face_crop, dtype=np.float32) / 255.0
-        if float(np.std(arr)) < 0.045:
+        # Sử dụng OpenCV Frontal Face Detection để bắt buộc phải có khuôn mặt người thật trong khung hình
+        rgb_np = np.asarray(img, dtype=np.uint8)
+        face_crop_pil: Image.Image | None = None
+        try:
+            import cv2  # type: ignore
+
+            gray_full = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2GRAY)
+            gray_eq = cv2.equalizeHist(gray_full)
+            cascade_path = os.path.join(
+                cv2.data.haarcascades, "haarcascade_frontalface_default.xml"
+            )
+            detector = cv2.CascadeClassifier(cascade_path)
+            min_dim = max(60, int(min(width, height) * 0.16))
+            faces = detector.detectMultiScale(
+                gray_eq,
+                scaleFactor=1.12,
+                minNeighbors=5,
+                minSize=(min_dim, min_dim),
+            )
+            if len(faces) == 0:
+                alt_path = os.path.join(
+                    cv2.data.haarcascades, "haarcascade_frontalface_alt2.xml"
+                )
+                alt_detector = cv2.CascadeClassifier(alt_path)
+                faces = alt_detector.detectMultiScale(
+                    gray_eq,
+                    scaleFactor=1.12,
+                    minNeighbors=4,
+                    minSize=(min_dim, min_dim),
+                )
+
+            if len(faces) == 0:
+                raise ValueError(
+                    "Chưa phát hiện khuôn mặt trong khung hình. Vui lòng hướng Camera sau thẳng vào khuôn mặt nơi đủ sáng."
+                )
+
+            # Chọn khuôn mặt lớn nhất trong khung hình
+            x, y, w_box, h_box = max(faces, key=lambda b: int(b[2]) * int(b[3]))
+            pad_x = int(w_box * 0.12)
+            pad_y = int(h_box * 0.12)
+            x1 = max(0, int(x) - pad_x)
+            y1 = max(0, int(y) - pad_y)
+            x2 = min(width, int(x + w_box) + pad_x)
+            y2 = min(height, int(y + h_box) + pad_y)
+            face_crop_pil = img.crop((x1, y1, x2, y2)).resize(
+                (64, 64), Image.Resampling.BICUBIC
+            )
+        except ValueError:
+            raise
+        except Exception:
+            min_side = min(width, height)
+            crop_size = int(min_side * 0.65)
+            left = (width - crop_size) // 2
+            top = (height - crop_size) // 2
+            face_crop_pil = img.crop((left, top, left + crop_size, top + crop_size)).resize(
+                (64, 64), Image.Resampling.BICUBIC
+            )
+
+        arr = np.asarray(face_crop_pil, dtype=np.float32) / 255.0
+        if float(np.std(arr)) < 0.05:
             raise ValueError("Khung hình camera quá tối hoặc bị mờ. Vui lòng hướng camera sau vào khuôn mặt nơi đủ sáng.")
 
         gray = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
@@ -460,3 +511,4 @@ class BiometricEngine:
         emb_512 = np.concatenate([small_16 / 32.0, gx_128, gy_128], axis=0)
         emb_512 = emb_512 - float(np.mean(emb_512))
         return l2_normalize(emb_512), {"width": width, "height": height}
+
