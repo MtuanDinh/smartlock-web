@@ -33,6 +33,7 @@ import type { SmartLockService } from './service';
 import type {
   BiometricEnrollStep,
   BiometricEnrollTarget,
+  BiometricSystemStatus,
   LogEntry,
   MutationResult,
   User,
@@ -261,6 +262,42 @@ export function createFirebaseService(
       return () => {
         unsyncedListeners.delete(cb);
       };
+    },
+
+    subscribeBiometricSystem(cb) {
+      const bioRef = deps.ref(deps.db, PATHS.SYSTEM_BIOMETRICS);
+      return deps.onValue(bioRef, (snap) => {
+        const raw = snap.val() as Partial<BiometricSystemStatus> | null;
+        const now = deps.now ? deps.now() : Date.now();
+        const updatedAt = Number(raw?.updatedAt ?? 0);
+        const isOnline = Boolean(raw?.online && (now - updatedAt < 60000));
+
+        let fallbackUrl = '';
+        if (import.meta.env.VITE_BIOMETRIC_SERVER_URL) {
+          fallbackUrl = `${String(import.meta.env.VITE_BIOMETRIC_SERVER_URL).replace(/\/+$/, '')}/kiosk`;
+        } else if (typeof window !== 'undefined') {
+          const host = window.location.hostname;
+          if (host === 'localhost' || host === '127.0.0.1') {
+            fallbackUrl = `http://${host}:8000/kiosk`;
+          } else if (!host.endsWith('github.io')) {
+            fallbackUrl = `https://${host}:8443/kiosk`;
+          }
+        }
+
+        const effectiveKioskUrl =
+          raw?.kioskUrl && typeof raw.kioskUrl === 'string' && raw.kioskUrl.trim().length > 0
+            ? raw.kioskUrl.trim()
+            : fallbackUrl;
+
+        cb({
+          online: isOnline,
+          kioskUrl: effectiveKioskUrl,
+          lanKioskUrl: raw?.lanKioskUrl,
+          lanHttpKioskUrl: raw?.lanHttpKioskUrl,
+          lanIp: raw?.lanIp,
+          updatedAt: updatedAt || undefined,
+        });
+      });
     },
 
     subscribeLockdown(cb) {

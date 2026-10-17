@@ -3,6 +3,7 @@ import type {
   AuthUser,
   BiometricEnrollCommand,
   BiometricEnrollTarget,
+  BiometricSystemStatus,
   LogEntry,
   MutationResult,
   User,
@@ -305,6 +306,18 @@ export function createMockService(): SmartLockService {
       unsyncedSubs.add(cb);
       cb(hasUnsyncedChanges);
       return () => unsyncedSubs.delete(cb);
+    },
+
+    subscribeBiometricSystem(cb: (status: BiometricSystemStatus) => void) {
+      cb({
+        online: true,
+        kioskUrl: 'http://localhost:8000/kiosk',
+        lanKioskUrl: 'https://192.168.100.114:8443/kiosk',
+        lanHttpKioskUrl: 'http://192.168.100.114:8000/kiosk',
+        lanIp: '192.168.100.114',
+        updatedAt: Date.now(),
+      });
+      return () => {};
     },
 
     subscribeLockdown(cb) {

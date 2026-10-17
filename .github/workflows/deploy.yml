@@ -64,6 +64,7 @@ jobs:
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID || 'lock-iot-2a021' }}
           VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL || 'https://lock-iot-2a021-default-rtdb.asia-southeast1.firebasedatabase.app' }}
           VITE_ONLINE_THRESHOLD_MS: ${{ vars.VITE_ONLINE_THRESHOLD_MS || '35000' }}
+          VITE_BIOMETRIC_SERVER_URL: ${{ vars.VITE_BIOMETRIC_SERVER_URL || '' }}
           VITE_USE_MOCK: 'false'
         run: npm run build
 

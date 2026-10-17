@@ -28,6 +28,8 @@ export const PATHS = {
   RFID_ITEM: (uid: string) => `SmartLock/RFID/${uid}`,
   BIOMETRICS: 'SmartLock/Biometrics',
   BIOMETRIC_ITEM: (userId: string) => `SmartLock/Biometrics/${userId}`,
+  SYSTEM_BIOMETRICS: 'SmartLock/System/Biometrics',
+  SYSTEM_BIOMETRICS_KIOSK_URL: 'SmartLock/System/Biometrics/kioskUrl',
 } as const;
 
 export const ONLINE_THRESHOLD_MS =
