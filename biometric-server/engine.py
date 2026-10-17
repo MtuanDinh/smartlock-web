@@ -862,7 +862,7 @@ class BiometricEngine:
         yaw_metric = float((nt_x - eye_mid_x) / max(eye_dx, 0.04))
 
         # Pitch metric: tỷ lệ độ cao mũi giữa trục mắt và trục miệng
-        # Mũi nhích lên trục mắt -> pitch <= 0.46 (Ngẩng lên)
+        # Mũi nhích lên trục mắt -> pitch <= 0.50 (Ngẩng lên)
         # Mũi chúc xuống trục miệng -> pitch >= 0.55 (Cúi xuống)
         pitch_metric = float((nt_y - eye_mid_y) / face_vert)
 
@@ -917,16 +917,16 @@ class BiometricEngine:
                 val_pose = f"Đạt góc Phải (Yaw {yaw_metric:+.2f} ≤ -0.14)"
         elif pose_key == "up":
             pose_name = "4. Góc ngẩng Lên trên"
-            if pitch_metric > 0.46:
+            if pitch_metric > 0.50:
                 pass_pose = False
-                pose_reason = "Hãy ngẩng nhẹ đầu LÊN TRÊN (khoảng 10°–20°)."
-                val_pose = f"Chưa đủ ngẩng (Pitch {pitch_metric:.2f} cần ≤ 0.46)"
+                pose_reason = "Hãy ngẩng nhẹ đầu LÊN TRÊN."
+                val_pose = f"Chưa đủ ngẩng (Pitch {pitch_metric:.2f} cần ≤ 0.50)"
             elif abs(yaw_metric) > 0.28:
                 pass_pose = False
                 pose_reason = "Hãy giữ mặt ở giữa khi ngẩng đầu lên trên."
                 val_pose = f"Lệch quay ngang ({yaw_metric:+.2f})"
             else:
-                val_pose = f"Đạt góc Ngẩng (Pitch {pitch_metric:.2f} ≤ 0.46)"
+                val_pose = f"Đạt góc Ngẩng (Pitch {pitch_metric:.2f} ≤ 0.50)"
         elif pose_key == "down":
             pose_name = "4. Góc cúi Xuống dưới"
             if pitch_metric < 0.55:
