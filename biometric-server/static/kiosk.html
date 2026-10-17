@@ -287,7 +287,7 @@
 
           <div class="scan-laser"></div>
 
-          <!-- Top Badge: Trạng thái khớp khung mô hình & Đếm ngược 10s -->
+          <!-- Top Badge: Trạng thái khớp khung mô hình & Đèn Flash LED & Đếm ngược -->
           <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 pointer-events-none">
             <span
               id="face-align-badge"
@@ -295,12 +295,23 @@
             >
               🎯 ĐẶT MẶT VÀO KHUNG MÔ HÌNH
             </span>
-            <span
-              id="face-prep-timer"
-              class="hidden px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0"
-            >
-              ⏳ 10s
-            </span>
+            <div class="flex items-center gap-1.5 pointer-events-auto">
+              <button
+                id="btn-toggle-torch"
+                type="button"
+                title="Bật/Tắt Đèn Flash điện thoại"
+                class="hidden px-2 py-1 rounded-lg bg-slate-900/85 hover:bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-mono font-medium shadow-md backdrop-blur-sm transition-all flex items-center gap-1 active:scale-95"
+              >
+                <span id="torch-icon">🔦</span>
+                <span id="torch-label">FLASH</span>
+              </button>
+              <span
+                id="face-prep-timer"
+                class="hidden px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0 pointer-events-none"
+              >
+                ⏳ 10s
+              </span>
+            </div>
           </div>
 
           <div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-sm text-[10px] font-mono text-sky-300">
@@ -435,6 +446,9 @@
     const faceAlgoList = document.getElementById('face-algo-list');
     const btnForceSnapFace = document.getElementById('btn-force-snap-face');
     const btnFinishEnrollAngles = document.getElementById('btn-finish-enroll-angles');
+    const btnToggleTorch = document.getElementById('btn-toggle-torch');
+    const torchIcon = document.getElementById('torch-icon');
+    const torchLabel = document.getElementById('torch-label');
     const enrollAngleStepper = document.getElementById('enroll-angle-stepper');
     const enrollAngleProgress = document.getElementById('enroll-angle-progress');
     const vadCore = document.getElementById('vad-core');
@@ -468,6 +482,8 @@
     let audioCtx = null;
     let scriptProcessor = null;
     let kioskStarted = false;
+    let isTorchEnabled = false;
+    let isTorchSupported = false;
 
     // 5 Góc khuôn mặt cần thu khi Đăng ký (Enroll)
     const ENROLL_POSES = [
@@ -684,17 +700,84 @@
       videoEl.srcObject = camStream;
       videoEl.style.transform =
         preferredFacingMode === 'environment' ? 'scaleX(1)' : 'scaleX(-1)';
-      videoEl.onloadedmetadata = () => {
+      videoEl.onloadedmetadata = async () => {
         videoEl.play().catch(() => {});
         const w = videoEl.videoWidth || 1280;
         const h = videoEl.videoHeight || 720;
         const camName =
           preferredFacingMode === 'environment' ? 'CAM SAU HD' : 'CAM TRƯỚC';
         camResLabel.textContent = `${camName} • ${w}x${h}`;
+
+        // Khi đang ở giai đoạn quét mặt (xác thực hoặc đăng ký), tự động bật đèn Flash của điện thoại
+        if (!cameraVisual.classList.contains('hidden')) {
+          await setFlashlightTorch(true);
+        }
       };
     }
 
+    async function setFlashlightTorch(enable) {
+      if (!videoStream || !videoStream.active) {
+        isTorchEnabled = Boolean(enable);
+        return;
+      }
+      const track = videoStream.getVideoTracks()[0];
+      if (!track) return;
+
+      try {
+        const capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {};
+        if ('torch' in capabilities || capabilities.torch !== undefined) {
+          isTorchSupported = true;
+          await track.applyConstraints({
+            advanced: [{ torch: Boolean(enable) }],
+          });
+          isTorchEnabled = Boolean(enable);
+          updateTorchIndicatorUI(isTorchEnabled, true);
+          return;
+        }
+
+        // Thử áp dụng trực tiếp constraints nâng cao (nhiều thiết bị Android hỗ trợ trực tiếp)
+        await track.applyConstraints({
+          advanced: [{ torch: Boolean(enable) }],
+        });
+        isTorchSupported = true;
+        isTorchEnabled = Boolean(enable);
+        updateTorchIndicatorUI(isTorchEnabled, true);
+      } catch (err) {
+        console.debug('Camera flashlight torch error or not supported:', err);
+        isTorchEnabled = false;
+        updateTorchIndicatorUI(false, false);
+      }
+    }
+
+    function updateTorchIndicatorUI(active, supported = true) {
+      if (!btnToggleTorch || !torchIcon || !torchLabel) return;
+      if (!supported && !isTorchSupported) {
+        btnToggleTorch.classList.add('hidden');
+        return;
+      }
+      btnToggleTorch.classList.remove('hidden');
+      if (active) {
+        btnToggleTorch.className =
+          'px-2 py-1 rounded-lg bg-amber-400 text-slate-950 text-[10px] font-mono font-extrabold shadow-lg shadow-amber-400/40 backdrop-blur-sm transition-all flex items-center gap-1 active:scale-95 animate-pulse';
+        torchIcon.textContent = '⚡';
+        torchLabel.textContent = 'FLASH BẬT';
+      } else {
+        btnToggleTorch.className =
+          'px-2 py-1 rounded-lg bg-slate-900/85 hover:bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-mono font-medium shadow-md backdrop-blur-sm transition-all flex items-center gap-1 active:scale-95';
+        torchIcon.textContent = '🔦';
+        torchLabel.textContent = 'FLASH TẮT';
+      }
+    }
+
+    if (btnToggleTorch) {
+      btnToggleTorch.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await setFlashlightTorch(!isTorchEnabled);
+      });
+    }
+
     function stopCameraStream() {
+      void setFlashlightTorch(false);
       if (videoStream) {
         videoStream.getTracks().forEach((t) => t.stop());
         videoStream = null;
@@ -703,6 +786,7 @@
     }
 
     btnSwitchCam.addEventListener('click', async () => {
+      await setFlashlightTorch(false);
       preferredFacingMode =
         preferredFacingMode === 'environment' ? 'user' : 'environment';
       btnSwitchCam.textContent =
@@ -712,6 +796,7 @@
       if (kioskStarted && !cameraVisual.classList.contains('hidden')) {
         stopCameraStream();
         await ensureRearCameraHDActive();
+        await setFlashlightTorch(true);
       }
     });
 
@@ -972,9 +1057,11 @@
       isFaceMismatched = false;
       if (phase === 'voice') {
         clearLandmarkCanvas();
+        await setFlashlightTorch(false);
         if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
         if (btnFinishEnrollAngles) btnFinishEnrollAngles.classList.add('hidden');
         if (enrollAngleStepper) enrollAngleStepper.classList.add('hidden');
+        if (btnToggleTorch) btnToggleTorch.classList.add('hidden');
         voiceVisual.classList.remove('hidden');
         cameraVisual.classList.add('hidden');
         cameraVisual.classList.remove('flex');
@@ -995,6 +1082,7 @@
           'rounded-xl py-2 px-3 border border-sky-400/60 bg-sky-500/20 text-sky-200 flex items-center justify-center gap-1.5';
         try {
           await ensureRearCameraHDActive();
+          await setFlashlightTorch(true);
         } catch (err) {
           statusDesc.textContent =
             'Không thể mở Camera sau: ' + (err && err.message ? err.message : err);
@@ -1026,6 +1114,7 @@
             if (data.isComplete || currentEnrollPoseIndex >= ENROLL_POSES.length - 1) {
               currentEnrollPoseIndex = ENROLL_POSES.length;
               updateEnrollAngleStepperUI();
+              await setFlashlightTorch(false);
               speakPrompt(`Đã lưu toàn bộ góc khuôn mặt thành công cho ${enrollInfo.userName}!`);
               enrollInfo.active = false;
               enrollInfo.step = 'completed';
@@ -1070,6 +1159,7 @@
             triggerShutterFlash();
             completedEnrollPoses.add(currentPoseObj.id);
             updateEnrollAngleStepperUI();
+            await setFlashlightTorch(false);
             speakPrompt(`Đã lưu ${completedEnrollPoses.size} góc khuôn mặt cho ${enrollInfo.userName} thành công!`);
             enrollInfo.active = false;
             enrollInfo.step = 'completed';
@@ -1341,6 +1431,7 @@
                 );
                 enrollInfo.active = false;
                 enrollInfo.step = 'completed';
+                await setFlashlightTorch(false);
                 setTimeout(() => {
                   void setVisualPhase('voice');
                 }, 2000);
@@ -1382,6 +1473,7 @@
         if (leftSec <= 0) {
           activeSessionToken = null;
           faceMatchingStartAt = 0;
+          await setFlashlightTorch(false);
           clearLandmarkCanvas();
           await setVisualPhase('voice');
           statusTitle.textContent = 'Hết thời gian quét khuôn mặt';
@@ -1406,6 +1498,7 @@
         if (data.unlocked) {
           activeSessionToken = null;
           faceMatchingStartAt = 0;
+          await setFlashlightTorch(false);
           triggerShutterFlash();
           updateFaceGuideVisual('aligned', '🔓 XÁC THỰC KHUÔN MẶT ĐẠT');
           teleScores.textContent = `Voice: ${Math.round(
@@ -1434,6 +1527,7 @@
           isFaceMismatched = true;
           activeSessionToken = null;
           faceMatchingStartAt = 0;
+          await setFlashlightTorch(false);
           clearLandmarkCanvas();
           updateFaceGuideVisual('error', '❌ KHÔNG KHỚP KHUÔN MẶT');
           camCountdown.textContent = '0s';
@@ -1463,6 +1557,7 @@
         if (data.expired) {
           activeSessionToken = null;
           faceMatchingStartAt = 0;
+          await setFlashlightTorch(false);
           clearLandmarkCanvas();
           await setVisualPhase('voice');
           statusTitle.textContent = 'Phiên xác thực đã hết hạn';
@@ -1737,6 +1832,10 @@
           httpsWarningBox.classList.remove('hidden');
         }
       }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      void setFlashlightTorch(false);
     });
   </script>
 </body>
