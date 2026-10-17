@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bản Mẫu Giao Diện (DESIGN.md) — Smart Lock IoT Access Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .preview-frame-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 75%);
+      overflow: auto;
+      padding: 0;
+      transition: padding 0.25s ease;
+    }
+    .preview-frame-wrapper.framed {
+      padding: 16px;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #faf8ff;
+      transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.25s ease, box-shadow 0.25s ease;
+    }
+    .viewport-tablet iframe {
+      width: 768px;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.12);
+    }
+    .viewport-mobile iframe {
+      width: 390px;
+      border-radius: 24px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.15);
+    }
+  </style>
+</head>
+<body>
+  <!-- Thanh điều khiển chọn Screen & Viewport -->
+  <header class="h-14 px-4 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0 z-50">
+    <div class="flex items-center gap-2.5">
+      <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600 text-white font-bold text-sm shadow">SL</span>
+      <div class="hidden sm:flex flex-col">
+        <span class="text-xs font-bold tracking-wide text-white uppercase">Bản Mẫu DESIGN.md (Stitch Preview)</span>
+        <span class="text-[11px] text-slate-400">Project ID: 7302845698075231897 · 4 Màn hình chuẩn</span>
+      </div>
+    </div>
+
+    <!-- Bộ chuyển đổi 4 Screen trong DESIGN.md -->
+    <nav class="flex items-center gap-1 bg-slate-800/90 p-1 rounded-full border border-slate-700/70 overflow-x-auto">
+      <button data-screen="login" class="screen-btn px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all text-slate-300 hover:text-white">
+        1. Đăng nhập (SCREEN_2)
+      </button>
+      <button data-screen="dashboard" class="screen-btn px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all bg-blue-600 text-white shadow">
+        2. Tổng quan (SCREEN_6)
+      </button>
+      <button data-screen="users" class="screen-btn px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all text-slate-300 hover:text-white">
+        3. Thành viên (SCREEN_8)
+      </button>
+      <button data-screen="logs" class="screen-btn px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all text-slate-300 hover:text-white">
+        4. Nhật ký (SCREEN_4)
+      </button>
+    </nav>
+
+    <!-- Bộ chuyển đổi kích thước màn hình -->
+    <div class="hidden md:flex items-center gap-1 bg-slate-800/80 p-1 rounded-lg border border-slate-700/60">
+      <button data-vp="desktop" class="vp-btn px-2.5 py-1 rounded text-xs font-medium bg-slate-700 text-white">Desktop (100%)</button>
+      <button data-vp="tablet" class="vp-btn px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white">Tablet (768px)</button>
+      <button data-vp="mobile" class="vp-btn px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white">Mobile (390px)</button>
+    </div>
+  </header>
+
+  <!-- Khung hiển thị trực tiếp màn hình -->
+  <div id="frameWrapper" class="preview-frame-wrapper">
+    <iframe id="previewFrame" src="./preview/dashboard.html" title="Stitch Screen Preview"></iframe>
+  </div>
+
+  <script>
+    const frame = document.getElementById('previewFrame');
+    const wrapper = document.getElementById('frameWrapper');
+    const screenBtns = document.querySelectorAll('.screen-btn');
+    const vpBtns = document.querySelectorAll('.vp-btn');
+
+    function setActiveScreen(screen) {
+      frame.src = './preview/' + screen + '.html';
+      screenBtns.forEach(btn => {
+        if (btn.getAttribute('data-screen') === screen) {
+          btn.className = 'screen-btn px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all bg-blue-600 text-white shadow';
+        } else {
+          btn.className = 'screen-btn px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all text-slate-300 hover:text-white';
+        }
+      });
+      window.location.hash = screen;
+    }
+
+    screenBtns.forEach(btn => {
+      btn.addEventListener('click', () => setActiveScreen(btn.getAttribute('data-screen')));
+    });
+
+    vpBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const vp = btn.getAttribute('data-vp');
+        wrapper.classList.remove('viewport-tablet', 'viewport-mobile', 'framed');
+        if (vp === 'tablet') wrapper.classList.add('viewport-tablet', 'framed');
+        if (vp === 'mobile') wrapper.classList.add('viewport-mobile', 'framed');
+        vpBtns.forEach(b => {
+          b.className = b === btn
+            ? 'vp-btn px-2.5 py-1 rounded text-xs font-medium bg-slate-700 text-white'
+            : 'vp-btn px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white';
+        });
+      });
+    });
+
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'SWITCH_SCREEN' && e.data.screen) {
+        setActiveScreen(e.data.screen);
+      }
+    });
+
+    const initialHash = window.location.hash.replace('#', '');
+    if (['login', 'dashboard', 'users', 'logs'].includes(initialHash)) {
+      setActiveScreen(initialHash);
+    }
+  </script>
+</body>
+</html>
