@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   WifiOff,
   RefreshCw,
@@ -14,6 +15,7 @@ import { Button } from '../ui/Button';
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const location = useLocation();
   const {
     connectionState,
     isClientConnected,
@@ -133,7 +135,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
       )}
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
-        {children}
+        <div key={location.pathname} className="animate-page-enter">
+          {children}
+        </div>
       </main>
 
       <footer className="mt-auto border-t border-outline-variant/30 py-6 text-center text-xs text-outline">

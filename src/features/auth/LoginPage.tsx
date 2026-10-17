@@ -45,7 +45,7 @@ export const LoginPage: React.FC = () => {
       </div>
 
       {/* Main Dual Card */}
-      <div className="relative z-10 mx-auto w-full max-w-[1020px] my-auto py-6">
+      <div className="relative z-10 mx-auto w-full max-w-[1020px] my-auto py-6 animate-page-enter">
         <div className="card-glass grid grid-cols-1 lg:grid-cols-12 rounded-2xl shadow-2xl overflow-hidden">
           {/* Left Column: IoT Security Brand Visual (Static, honest - Hidden on Mobile) */}
           <div className="hidden lg:flex lg:col-span-5 bg-surface-container-low/70 dark:bg-surface-container/50 p-6 sm:p-8 flex-col justify-between border-r border-outline-variant/30">
@@ -64,17 +64,26 @@ export const LoginPage: React.FC = () => {
 
               {/* Decorative Lock Ring Visual */}
               <div className="my-8 relative flex items-center justify-center">
-                {/* Animated outer wave ring */}
                 <div
-                  className="absolute h-36 w-36 rounded-full bg-primary/20 animate-ping opacity-35 pointer-events-none motion-reduce:hidden"
+                  className="absolute h-40 w-40 rounded-full bg-primary/20 animate-lock-aura pointer-events-none blur-xl"
                   aria-hidden="true"
                 />
-                <div className="relative z-10 flex h-36 w-36 items-center justify-center rounded-full border-4 border-primary/20 bg-primary/5 shadow-inner animate-lock-breathe">
-                  <div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-gradient-to-tr from-primary to-primary-container text-white shadow-lg shadow-blue-500/30 transition-transform duration-500 hover:scale-105">
-                    <Lock className="h-9 w-9 text-white" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider mt-0.5 opacity-90 text-white">
-                      Bảo mật
-                    </span>
+                <div
+                  className="absolute h-40 w-40 rounded-full border-2 border-primary/35 bg-primary/5 animate-lock-sonar pointer-events-none"
+                  aria-hidden="true"
+                />
+                <div
+                  className="absolute h-40 w-40 rounded-full border border-primary/30 bg-primary/5 animate-lock-sonar-delayed pointer-events-none"
+                  aria-hidden="true"
+                />
+                <div className="relative z-10 flex h-40 w-40 items-center justify-center rounded-full border-2 border-primary/30 bg-primary/10 shadow-xl shadow-blue-500/15 animate-lock-breathe">
+                  <div className="flex h-30 w-30 h-[116px] w-[116px] items-center justify-center rounded-full bg-white/85 dark:bg-slate-900/85 border border-white/90 dark:border-white/10 shadow-md backdrop-blur-md animate-lock-breathe-middle">
+                    <div className="flex h-22 w-22 h-[88px] w-[88px] flex-col items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 via-primary to-sky-400 text-white shadow-lg shadow-blue-500/30 ring-1 ring-white/30 transition-transform duration-500 hover:scale-105 animate-lock-breathe-core">
+                      <Lock className="h-8 w-8 text-white drop-shadow-sm" />
+                      <span className="mt-1 text-[9px] font-extrabold uppercase tracking-normal leading-none text-white/95">
+                        Bảo mật
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

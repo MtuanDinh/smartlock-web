@@ -24,12 +24,12 @@ export const DashboardPage: React.FC = () => {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Left Column: Hero Lock Controller (5 cols on Desktop) */}
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-5 animate-stagger-2">
           <LockStatusHero />
         </div>
 
         {/* Right Column: Recent Activity & Quick Navigation (7 cols on Desktop) */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-6 animate-stagger-3">
           <RecentActivity />
 
           {/* Member Quick Access Card */}

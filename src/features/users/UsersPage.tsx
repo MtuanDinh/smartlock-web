@@ -150,81 +150,123 @@ export const UsersPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. 3 KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 animate-stagger-1">
         {/* KPI 1: Tổng thành viên */}
-        <div className="card-glass card-glass-interactive rounded-2xl p-5 relative overflow-hidden group flex items-center gap-4">
-          <div className="pointer-events-none absolute -right-6 -bottom-6 h-28 w-28 rounded-full bg-blue-500/10 blur-xl group-hover:bg-blue-500/20 transition-all duration-300" aria-hidden="true" />
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed/40 text-primary border border-primary/20 shadow-sm relative z-10">
-            <Users className="h-6 w-6" />
-          </div>
-          <div className="min-w-0 relative z-10">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-outline">
-              Tổng thành viên
-            </p>
-            <p className="text-3xl font-extrabold tracking-tight font-mono text-on-surface">
-              {totalCount}
-            </p>
-            <p className="text-[11px] font-medium text-secondary dark:text-emerald-400 truncate">
-              {activeCount} đang mở quyền truy cập
-            </p>
+        <div className="card-glass card-glass-interactive kpi-glass-blue rounded-2xl p-5 relative overflow-hidden group flex items-center justify-between gap-4">
+          <div
+            className="pointer-events-none absolute inset-x-6 top-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500/75 to-transparent opacity-80 group-hover:opacity-100 transition-opacity"
+            aria-hidden="true"
+          />
+          <Users
+            className="pointer-events-none absolute -right-3 -bottom-3 h-24 w-24 text-blue-500/[0.06] dark:text-blue-400/[0.07] -rotate-12 group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-500"
+            aria-hidden="true"
+          />
+          <div className="flex items-center gap-4 min-w-0 relative z-10">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/20 via-blue-500/10 to-indigo-500/5 text-primary border border-primary/30 shadow-md shadow-blue-500/10 ring-1 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300">
+              <Users className="h-6 w-6 drop-shadow-xs" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/80">
+                Tổng thành viên
+              </p>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <p className="text-3xl font-extrabold tracking-tight font-mono text-on-surface">
+                  {totalCount}
+                </p>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 border border-primary/20 rounded-md px-1.5 py-0.5">
+                  USERS
+                </span>
+              </div>
+              <p className="text-[11px] font-medium text-secondary dark:text-emerald-400 truncate mt-0.5">
+                {activeCount} đang mở quyền truy cập
+              </p>
+            </div>
           </div>
         </div>
 
         {/* KPI 2: Thẻ RFID đã gán */}
-        <div className="card-glass card-glass-interactive rounded-2xl p-5 relative overflow-hidden group flex items-center gap-4">
-          <div className="pointer-events-none absolute -right-6 -bottom-6 h-28 w-28 rounded-full bg-purple-500/10 blur-xl group-hover:bg-purple-500/20 transition-all duration-300" aria-hidden="true" />
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-tertiary-fixed/50 text-tertiary border border-tertiary/20 shadow-sm relative z-10">
-            <CreditCard className="h-6 w-6" />
-          </div>
-          <div className="min-w-0 relative z-10">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-outline">
-              Thẻ RFID đã gán
-            </p>
-            <p className="text-3xl font-extrabold tracking-tight font-mono text-on-surface">
-              {cardsCount} <span className="text-sm font-semibold text-outline font-sans">/ {totalCount}</span>
-            </p>
-            <p className="text-[11px] text-outline truncate">
-              Chuẩn mã hóa MIFARE 13.56 MHz
-            </p>
+        <div className="card-glass card-glass-interactive kpi-glass-purple rounded-2xl p-5 relative overflow-hidden group flex items-center justify-between gap-4">
+          <div
+            className="pointer-events-none absolute inset-x-6 top-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500/75 to-transparent opacity-80 group-hover:opacity-100 transition-opacity"
+            aria-hidden="true"
+          />
+          <CreditCard
+            className="pointer-events-none absolute -right-3 -bottom-3 h-24 w-24 text-purple-500/[0.06] dark:text-purple-400/[0.07] -rotate-12 group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-500"
+            aria-hidden="true"
+          />
+          <div className="flex items-center gap-4 min-w-0 relative z-10">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500/20 via-purple-500/10 to-fuchsia-500/5 text-tertiary border border-tertiary/30 shadow-md shadow-purple-500/10 ring-1 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300">
+              <CreditCard className="h-6 w-6 drop-shadow-xs" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/80">
+                Thẻ RFID đã gán
+              </p>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <p className="text-3xl font-extrabold tracking-tight font-mono text-on-surface">
+                  {cardsCount}{' '}
+                  <span className="text-sm font-semibold text-outline font-sans">
+                    / {totalCount}
+                  </span>
+                </p>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-tertiary bg-tertiary/10 border border-tertiary/20 rounded-md px-1.5 py-0.5">
+                  NFC
+                </span>
+              </div>
+              <p className="text-[11px] text-outline truncate mt-0.5">
+                Chuẩn mã hóa MIFARE 13.56 MHz
+              </p>
+            </div>
           </div>
         </div>
 
         {/* KPI 3: Trạng thái đồng bộ */}
-        <div className="card-glass card-glass-interactive rounded-2xl p-5 relative overflow-hidden group flex items-center gap-4">
-          <div className="pointer-events-none absolute -right-6 -bottom-6 h-28 w-28 rounded-full bg-emerald-500/10 blur-xl group-hover:bg-emerald-500/20 transition-all duration-300" aria-hidden="true" />
+        <div className="card-glass card-glass-interactive kpi-glass-emerald rounded-2xl p-5 relative overflow-hidden group flex items-center justify-between gap-4">
           <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border shadow-sm relative z-10 ${
-              hasUnsyncedChanges
-                ? 'bg-warning-container/40 text-warning border-warning/30'
-                : 'bg-secondary-container/30 text-secondary dark:text-emerald-400 border-secondary/20'
-            }`}
-          >
-            {hasUnsyncedChanges ? (
-              <AlertTriangle className="h-6 w-6" />
-            ) : (
-              <CheckCircle2 className="h-6 w-6" />
-            )}
-          </div>
-          <div className="min-w-0 relative z-10">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-outline">
-              Trạng thái đồng bộ
-            </p>
-            <p
-              className={`text-base font-extrabold tracking-tight truncate ${
-                hasUnsyncedChanges ? 'text-warning' : 'text-secondary dark:text-emerald-400'
+            className="pointer-events-none absolute inset-x-6 top-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500/75 to-transparent opacity-80 group-hover:opacity-100 transition-opacity"
+            aria-hidden="true"
+          />
+          <CheckCircle2
+            className="pointer-events-none absolute -right-3 -bottom-3 h-24 w-24 text-emerald-500/[0.06] dark:text-emerald-400/[0.07] -rotate-12 group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-500"
+            aria-hidden="true"
+          />
+          <div className="flex items-center gap-4 min-w-0 relative z-10">
+            <div
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border shadow-md ring-1 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300 ${
+                hasUnsyncedChanges
+                  ? 'bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-orange-500/5 text-warning border-warning/30 shadow-amber-500/10'
+                  : 'bg-gradient-to-br from-emerald-500/20 via-emerald-500/10 to-teal-500/5 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 shadow-emerald-500/10'
               }`}
             >
-              {hasUnsyncedChanges ? 'Chưa đồng bộ' : 'Đã đồng bộ'}
-            </p>
-            <p className="text-[11px] text-outline truncate">
-              Đồng bộ tức thời qua Firebase RTDB
-            </p>
+              {hasUnsyncedChanges ? (
+                <AlertTriangle className="h-6 w-6 drop-shadow-xs" />
+              ) : (
+                <CheckCircle2 className="h-6 w-6 drop-shadow-xs" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/80">
+                Trạng thái đồng bộ
+              </p>
+              <p
+                className={`text-base font-extrabold tracking-tight truncate mt-0.5 ${
+                  hasUnsyncedChanges
+                    ? 'text-warning'
+                    : 'text-emerald-600 dark:text-emerald-400'
+                }`}
+              >
+                {hasUnsyncedChanges ? 'Chưa đồng bộ' : 'Đã đồng bộ'}
+              </p>
+              <p className="text-[11px] text-outline truncate mt-0.5">
+                Đồng bộ tức thời qua Firebase RTDB
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
       {/* 2. Khung Quản lý Thành viên */}
-      <div className="card-glass rounded-2xl overflow-hidden shadow-sm">
+      <div className="card-glass rounded-2xl overflow-hidden shadow-sm animate-stagger-2">
         {/* Top Header of Card */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/30 bg-surface-container-low/20 p-5 sm:px-6">
           <div className="flex items-center gap-3">
@@ -357,7 +399,7 @@ export const UsersPage: React.FC = () => {
             />
           </div>
         ) : (
-          <>
+          <div key={activeTab} className="animate-tab-switch">
             {/* Mobile View (< 768px): Card List */}
             <div className="divide-y divide-outline-variant/20 md:hidden">
               {filteredUsers.map((user) => {
@@ -697,14 +739,14 @@ export const UsersPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </>
+          </div>
         )}
       </div>
 
       {/* 3. 2 Practical Guidance Cards at Bottom */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 animate-stagger-3">
         {/* Card 1: Gán thẻ từ RFID */}
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm">
+        <div className="card-glass card-glass-interactive rounded-2xl p-5 shadow-sm">
           <div className="flex items-center gap-2.5 mb-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-tertiary-fixed/50 text-tertiary border border-tertiary/20">
               <Radio className="h-4 w-4" />
@@ -719,7 +761,7 @@ export const UsersPage: React.FC = () => {
         </div>
 
         {/* Card 2: Quy tắc mã PIN an toàn */}
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm">
+        <div className="card-glass card-glass-interactive rounded-2xl p-5 shadow-sm">
           <div className="flex items-center gap-2.5 mb-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-fixed/40 text-primary border border-primary/20">
               <ShieldCheck className="h-4 w-4" />

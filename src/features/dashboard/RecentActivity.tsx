@@ -127,7 +127,7 @@ export const RecentActivity: React.FC = () => {
             description="Lịch sử đóng mở cửa và cảnh báo sẽ xuất hiện tại đây theo thời gian thực."
           />
         ) : (
-          <div className="relative ml-4">
+          <div key={filter} className="relative ml-4 animate-tab-switch">
             {/* Glowing Gradient Track Line */}
             <div
               className="absolute left-0 top-3 bottom-3 w-0.5 bg-gradient-to-b from-primary/60 via-outline-variant/40 to-transparent"

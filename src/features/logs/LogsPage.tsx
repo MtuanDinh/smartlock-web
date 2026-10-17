@@ -126,7 +126,7 @@ export const LogsPage: React.FC = () => {
       />
 
       {/* 2. Khung Quản lý Nhật ký Sự kiện */}
-      <div className="card-glass rounded-2xl overflow-hidden shadow-sm">
+      <div className="card-glass rounded-2xl overflow-hidden shadow-sm animate-stagger-2">
         {/* Header & Thanh công cụ */}
         <div className="border-b border-outline-variant/30 bg-surface-container-low/20 p-5 sm:px-6 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -245,7 +245,7 @@ export const LogsPage: React.FC = () => {
             />
           </div>
         ) : (
-          <div>
+          <div key={`${activeChip}-${currentPage}`} className="animate-tab-switch">
             {/* Mobile View (< 768px): Grouped Cards */}
             <div className="md:hidden">
               {paginatedGroups.map((group) => (

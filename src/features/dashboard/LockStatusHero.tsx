@@ -56,98 +56,121 @@ export const LockStatusHero: React.FC = () => {
   // 6. CỬA ĐANG ĐÓNG
   let heroConfig: {
     circleClass: string;
+    sonarClass: string;
     title: string;
     titleClass: string;
     subtext: string;
     icon: React.ReactNode;
     coreClass: string;
     coreSub?: string;
-    pingClass?: string;
-    bgGlowClass?: string;
+    pingClass: string;
+    bgGlowClass: string;
+    topHairlineClass: string;
     hasPulse: boolean;
   };
 
   if (connectionState === 'loading') {
     heroConfig = {
       circleClass:
-        'border-outline-variant/30 bg-surface-container text-outline',
+        'border-primary/35 bg-primary/10 text-primary shadow-xl shadow-blue-500/15',
+      sonarClass: 'border-primary/35 bg-primary/5',
       title: 'ĐANG KẾT NỐI HỆ THỐNG...',
       titleClass: 'text-on-surface-variant',
       subtext: 'Đang đồng bộ trạng thái trực tuyến từ ổ khóa thông minh.',
-      icon: <Loader2 className="h-10 w-10 sm:h-12 sm:w-12 animate-spin text-primary" />,
-      coreClass: 'bg-surface-container-high text-outline',
+      icon: <Loader2 className="h-8 w-8 sm:h-9 sm:w-9 animate-spin text-white drop-shadow-sm" />,
+      coreClass:
+        'bg-gradient-to-tr from-blue-700 via-primary to-sky-400 text-white shadow-lg shadow-blue-500/30 ring-1 ring-white/30',
       coreSub: 'Đang tải',
-      bgGlowClass: 'bg-primary/5',
-      hasPulse: false,
+      pingClass: 'bg-primary/25',
+      bgGlowClass: 'bg-blue-500/15',
+      topHairlineClass: 'via-blue-500/75',
+      hasPulse: true,
     };
   } else if (!isClientConnected) {
     heroConfig = {
       circleClass:
-        'border-warning/30 bg-warning-container/20 text-warning shadow-lg shadow-amber-500/10',
+        'border-amber-500/40 bg-amber-500/12 text-warning shadow-xl shadow-amber-500/15',
+      sonarClass: 'border-amber-500/40 bg-amber-500/5',
       title: 'ĐIỆN THOẠI/TRÌNH DUYỆT MẤT MẠNG',
       titleClass: 'text-warning dark:text-amber-400',
       subtext:
         'Thiết bị của bạn đang mất kết nối Internet. Các nút điều khiển tạm khóa.',
-      icon: <WifiOff className="h-10 w-10 sm:h-12 sm:w-12 text-white" />,
-      coreClass: 'bg-warning text-white shadow-lg shadow-amber-500/30',
+      icon: <WifiOff className="h-8 w-8 sm:h-9 sm:w-9 text-white drop-shadow-sm" />,
+      coreClass:
+        'bg-gradient-to-tr from-amber-600 via-amber-500 to-orange-400 text-white shadow-lg shadow-amber-500/35 ring-1 ring-white/30',
       coreSub: 'Mất mạng',
-      bgGlowClass: 'bg-amber-500/15',
-      hasPulse: false,
+      pingClass: 'bg-amber-500/25',
+      bgGlowClass: 'bg-amber-500/20',
+      topHairlineClass: 'via-amber-500/75',
+      hasPulse: true,
     };
   } else if (connectionState === 'offline') {
     heroConfig = {
       circleClass:
-        'border-outline-variant/40 bg-surface-container-high text-outline shadow-inner',
+        'border-slate-400/50 dark:border-slate-500/45 bg-slate-500/10 dark:bg-slate-400/10 text-outline shadow-xl shadow-slate-500/15',
+      sonarClass: 'border-slate-400/45 dark:border-slate-500/40 bg-slate-400/5',
       title: 'Ổ KHÓA MẤT KẾT NỐI',
-      titleClass: 'text-outline',
+      titleClass: 'text-on-surface-variant dark:text-slate-300',
       subtext: 'Ổ khóa không gửi nhịp tim trong 35 giây qua. Các nút điều khiển tạm khóa.',
-      icon: <WifiOff className="h-10 w-10 sm:h-12 sm:w-12 text-outline" />,
-      coreClass: 'bg-surface-container-high text-outline',
+      icon: <WifiOff className="h-8 w-8 sm:h-9 sm:w-9 text-white drop-shadow-sm" />,
+      coreClass:
+        'bg-gradient-to-tr from-slate-700 via-slate-600 to-slate-400 dark:from-slate-800 dark:via-slate-700 dark:to-slate-500 text-white shadow-lg shadow-slate-600/30 ring-1 ring-white/25',
       coreSub: 'Ngoại tuyến',
-      bgGlowClass: 'bg-slate-500/10',
-      hasPulse: false,
+      pingClass: 'bg-slate-400/25 dark:bg-slate-500/25',
+      bgGlowClass: 'bg-slate-500/15',
+      topHairlineClass: 'via-slate-400/75',
+      hasPulse: true,
     };
   } else if (remoteOpenAck) {
     heroConfig = {
       circleClass:
-        'border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shadow-xl shadow-emerald-500/20 scale-105',
+        'border-emerald-500/45 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shadow-xl shadow-emerald-500/25',
+      sonarClass: 'border-emerald-500/45 bg-emerald-500/10',
       title: 'THIẾT BỊ ĐÃ NHẬN LỆNH MỞ',
       titleClass: 'text-emerald-600 dark:text-emerald-400',
       subtext: 'Ổ khóa đã nhận lệnh mở và kích hoạt relay trong 3 giây.',
-      icon: <Unlock className="h-10 w-10 sm:h-12 sm:w-12 text-white" />,
-      coreClass: 'bg-gradient-to-tr from-emerald-600 via-teal-500 to-emerald-400 text-white shadow-lg shadow-emerald-500/35',
+      icon: <Unlock className="h-8 w-8 sm:h-9 sm:w-9 text-white drop-shadow-sm" />,
+      coreClass:
+        'bg-gradient-to-tr from-emerald-600 via-teal-500 to-emerald-400 text-white shadow-lg shadow-emerald-500/40 ring-1 ring-white/30',
       coreSub: 'Đã mở khóa',
       pingClass: 'bg-emerald-500/30',
       bgGlowClass: 'bg-emerald-500/25',
+      topHairlineClass: 'via-emerald-500/80',
       hasPulse: true,
     };
   } else if (isLockdown) {
     heroConfig = {
       circleClass:
-        'border-error/40 bg-error-container/30 text-error shadow-xl shadow-red-500/20',
+        'border-rose-500/45 bg-rose-500/15 text-error shadow-xl shadow-rose-500/25',
+      sonarClass: 'border-rose-500/45 bg-rose-500/10',
       title: 'ĐANG KHÓA CHẶT',
       titleClass: 'text-error dark:text-rose-400',
       subtext:
         'Chế độ an ninh cao nhất: Đã vô hiệu hóa bàn phím số và đầu đọc thẻ RFID.',
-      icon: <ShieldAlert className="h-10 w-10 sm:h-12 sm:w-12 text-white" />,
-      coreClass: 'bg-gradient-to-tr from-rose-600 via-red-600 to-pink-500 text-white shadow-lg shadow-red-500/35',
+      icon: <ShieldAlert className="h-8 w-8 sm:h-9 sm:w-9 text-white drop-shadow-sm" />,
+      coreClass:
+        'bg-gradient-to-tr from-rose-600 via-red-600 to-pink-500 text-white shadow-lg shadow-rose-500/40 ring-1 ring-white/30',
       coreSub: 'Khóa chặt',
-      pingClass: 'bg-error/30',
+      pingClass: 'bg-rose-500/30',
       bgGlowClass: 'bg-rose-500/25',
+      topHairlineClass: 'via-rose-500/80',
       hasPulse: true,
     };
   } else {
     heroConfig = {
       circleClass:
-        'border-primary/25 bg-primary/10 text-primary shadow-lg shadow-blue-500/15',
+        'border-primary/35 bg-primary/12 text-primary shadow-xl shadow-blue-500/20',
+      sonarClass: 'border-primary/40 bg-primary/5',
       title: 'CỬA ĐANG ĐÓNG',
       titleClass: 'text-on-surface',
       subtext: 'Hệ thống an ninh đang hoạt động bình thường. Mở khóa sẽ nhả chốt 3 giây.',
-      icon: <Lock className="h-10 w-10 sm:h-12 sm:w-12 text-white" />,
-      coreClass: 'bg-gradient-to-tr from-blue-600 via-primary to-blue-400 text-white shadow-lg shadow-blue-500/30',
+      icon: <Lock className="h-8 w-8 sm:h-9 sm:w-9 text-white drop-shadow-sm" />,
+      coreClass:
+        'bg-gradient-to-tr from-blue-600 via-primary to-sky-400 text-white shadow-lg shadow-blue-500/35 ring-1 ring-white/30',
       coreSub: 'Đã chốt',
-      pingClass: 'bg-primary/20',
-      bgGlowClass: 'bg-blue-500/15',
+      pingClass: 'bg-primary/25',
+      bgGlowClass: 'bg-blue-500/20',
+      topHairlineClass: 'via-blue-500/80',
       hasPulse: true,
     };
   }
@@ -173,9 +196,15 @@ export const LockStatusHero: React.FC = () => {
   return (
     <>
       <div className="card-glass relative overflow-hidden flex h-full flex-col justify-between rounded-2xl p-6 sm:p-8 text-center shadow-sm">
+        {/* Top Specular Refraction Hairline */}
+        <div
+          className={`pointer-events-none absolute inset-x-10 top-0 h-[2px] bg-gradient-to-r from-transparent ${heroConfig.topHairlineClass} to-transparent opacity-85 transition-colors duration-500`}
+          aria-hidden="true"
+        />
+
         {/* Ambient Top Glow for Hero */}
         <div
-          className={`pointer-events-none absolute inset-x-0 -top-16 h-48 rounded-full ${heroConfig.bgGlowClass || 'bg-blue-500/15'} blur-3xl transition-colors duration-500`}
+          className={`pointer-events-none absolute inset-x-0 -top-16 h-52 rounded-full ${heroConfig.bgGlowClass} blur-3xl transition-colors duration-500`}
           aria-hidden="true"
         />
 
@@ -187,37 +216,51 @@ export const LockStatusHero: React.FC = () => {
             />
           </div>
 
-          {/* Triple Ring Lock Visual Controller with Pulse/Ping & Aura */}
-          <div className="my-5 relative flex items-center justify-center">
-            {/* 1. Luminous breathing aura halo (thu ra mở vào rõ nét) */}
+          {/* Synchronized Multi-Ring Lock Visual Controller ("Thu ra mở vào") */}
+          <div className="my-6 relative flex items-center justify-center">
+            {/* 1. Luminous breathing aura halo */}
             {heroConfig.hasPulse && (
               <div
-                className={`absolute h-40 w-40 sm:h-44 sm:w-44 rounded-full ${heroConfig.pingClass} animate-lock-aura pointer-events-none blur-md`}
+                className={`absolute h-44 w-44 sm:h-48 sm:w-48 rounded-full ${heroConfig.pingClass} animate-lock-aura pointer-events-none blur-xl`}
                 aria-hidden="true"
               />
             )}
 
-            {/* 2. Animated outer wave ripple (lan tỏa như radar / ping wave) */}
+            {/* 2. Dual Staggered Sonar Wave Rings (Lan tỏa & thu mở nhịp nhàng) */}
             {heroConfig.hasPulse && (
-              <div
-                className={`absolute h-40 w-40 sm:h-44 sm:w-44 rounded-full ${heroConfig.pingClass} animate-ping opacity-40 pointer-events-none motion-reduce:hidden`}
-                aria-hidden="true"
-              />
+              <>
+                <div
+                  className={`absolute h-44 w-44 sm:h-48 sm:w-48 rounded-full border-2 ${heroConfig.sonarClass} animate-lock-sonar pointer-events-none`}
+                  aria-hidden="true"
+                />
+                <div
+                  className={`absolute h-44 w-44 sm:h-48 sm:w-48 rounded-full border ${heroConfig.sonarClass} animate-lock-sonar-delayed pointer-events-none`}
+                  aria-hidden="true"
+                />
+              </>
             )}
 
-            {/* 3. Main Triple Ring with breathing animation */}
+            {/* 3. Outer Breathing Ring */}
             <div
-              className={`relative z-10 flex h-40 w-40 sm:h-44 sm:w-44 items-center justify-center rounded-full border-2 transition-colors duration-300 ${heroConfig.circleClass} ${
+              className={`relative z-10 flex h-44 w-44 sm:h-48 sm:w-48 items-center justify-center rounded-full border-2 backdrop-blur-xs transition-colors duration-500 ${heroConfig.circleClass} ${
                 heroConfig.hasPulse ? 'animate-lock-breathe' : ''
               }`}
             >
-              <div className="flex h-28 w-28 sm:h-32 sm:w-32 items-center justify-center rounded-full bg-surface-container-lowest shadow-md transition-all">
+              {/* 4. Middle Frosted Glass Ring */}
+              <div
+                className={`flex h-32 w-32 sm:h-36 sm:w-36 items-center justify-center rounded-full bg-white/85 dark:bg-slate-900/85 border border-white/90 dark:border-white/10 shadow-lg backdrop-blur-md transition-all ${
+                  heroConfig.hasPulse ? 'animate-lock-breathe-middle' : ''
+                }`}
+              >
+                {/* 5. Inner 3D Core Sphere */}
                 <div
-                  className={`flex h-20 w-20 sm:h-24 sm:w-24 flex-col items-center justify-center rounded-full transition-transform duration-500 hover:scale-105 ${heroConfig.coreClass}`}
+                  className={`flex h-24 w-24 sm:h-28 sm:w-28 flex-col items-center justify-center rounded-full px-2 shadow-[inset_0_2px_4px_rgba(255,255,255,0.35)] transition-transform duration-500 hover:scale-105 ${heroConfig.coreClass} ${
+                    heroConfig.hasPulse ? 'animate-lock-breathe-core' : ''
+                  }`}
                 >
                   {heroConfig.icon}
                   {heroConfig.coreSub && (
-                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider mt-0.5 opacity-90">
+                    <span className="mt-1 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-normal leading-none text-white/95 whitespace-nowrap drop-shadow-xs">
                       {heroConfig.coreSub}
                     </span>
                   )}
