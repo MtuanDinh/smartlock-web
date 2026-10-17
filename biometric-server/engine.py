@@ -254,12 +254,129 @@ class BiometricEngine:
                 data = data.mean(axis=1)
             return data, int(sr)
 
+    @staticmethod
+    def _encode_samples_to_wav_bytes(samples: np.ndarray, sr: int = 16000) -> bytes:
+        """Đóng gói mảng float32 [-1.0, 1.0] thành chuẩn 16-bit PCM WAV bytes."""
+        import wave
+
+        clipped = np.clip(samples, -1.0, 1.0)
+        int16_samples = (clipped * 32767.0).astype(np.int16)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sr)
+            wf.writeframes(int16_samples.tobytes())
+        return buf.getvalue()
+
+    def normalize_and_boost_voice(
+        self,
+        audio_bytes: bytes,
+        target_rms: float = 0.14,
+        max_gain_db: float = 28.0,
+        peak_limit: float = 0.92,
+    ) -> Tuple[bytes, np.ndarray, float]:
+        """
+        Tự động cân bằng & khuếch đại (Automatic Gain Control - AGC & Loudness Normalization)
+        đưa toàn bộ âm lượng giọng nói về cùng mức Target RMS = 0.14 (~ -17 dBFS).
+        Đảm bảo dù người dùng nói gần (10cm) hay nói xa (1m), to hay nhỏ,
+        âm thanh đưa vào nhận diện người nói và nhận diện câu khẩu lệnh đều đồng nhất.
+        """
+        samples, sr = self._decode_audio_bytes(audio_bytes)
+        if samples.size < int(0.35 * sr):
+            raise ValueError("Đoạn âm thanh quá ngắn. Vui lòng nói rõ câu mật khẩu vào điện thoại.")
+
+        # Khử DC offset
+        samples = samples - float(np.mean(samples))
+
+        # Phân tích năng lượng từng khung 25ms (hop 10ms) để xác định các khung có tiếng nói
+        frame_len = int(0.025 * sr)
+        hop_len = int(0.010 * sr)
+        if samples.size < frame_len * 10:
+            raise ValueError("Đoạn thu âm quá ngắn. Vui lòng nói câu mật khẩu dài hơn.")
+
+        n_frames = 1 + (samples.size - frame_len) // hop_len
+        frame_rms = np.empty(n_frames, dtype=np.float32)
+        for i in range(n_frames):
+            seg = samples[i * hop_len : i * hop_len + frame_len]
+            frame_rms[i] = float(np.sqrt(np.mean(seg * seg)))
+
+        noise_floor = float(np.percentile(frame_rms, 20))
+        max_frame_rms = float(np.max(frame_rms)) if frame_rms.size > 0 else 0.0
+
+        if max_frame_rms < 0.006:
+            raise ValueError("Không phát hiện giọng nói (âm lượng quá nhỏ hoặc chỉ có tiếng ồn nền).")
+
+        # Ngưỡng phát hiện tiếng nói thích ứng với nền nhiễu và tỷ lệ biên độ (Scale-Invariant)
+        voice_thresh = max(0.003, noise_floor * 1.5, max_frame_rms * 0.10)
+        voiced_mask = frame_rms >= voice_thresh
+        voiced_indices = np.where(voiced_mask)[0]
+
+        if len(voiced_indices) < 18:
+            raise ValueError("Chưa phát hiện câu nói rõ ràng (chỉ có tạp âm ngắn).")
+
+        # Tính toán Active Voiced RMS chỉ trên các khung có tiếng nói thực sự
+        voiced_samples_list = []
+        for idx in voiced_indices:
+            start_i = idx * hop_len
+            end_i = min(samples.size, start_i + frame_len)
+            voiced_samples_list.append(samples[start_i:end_i])
+
+        if voiced_samples_list:
+            concatenated_voiced = np.concatenate(voiced_samples_list)
+            active_rms = float(np.sqrt(np.mean(concatenated_voiced * concatenated_voiced)))
+        else:
+            active_rms = float(np.sqrt(np.mean(samples * samples)))
+
+        active_rms = max(active_rms, 1e-5)
+
+        # Tính hệ số khuếch đại (Gain) cần thiết để đưa active_rms về target_rms (0.14)
+        desired_gain = target_rms / active_rms
+        max_gain = float(10.0 ** (max_gain_db / 20.0))  # +28 dB ~ 25.1x
+        min_gain = 0.20  # Hạ âm nếu nói quá to sát mic
+        actual_gain = float(np.clip(desired_gain, min_gain, max_gain))
+
+        # Khuếch đại toàn bộ chuỗi mẫu âm thanh
+        scaled = samples * actual_gain
+
+        # Áp dụng Soft-Knee Limiter (nén mềm qua hàm tanh) để chống vỡ tiếng (clipping)
+        soft_knee_thresh = 0.70
+        abs_scaled = np.abs(scaled)
+        over_mask = abs_scaled > soft_knee_thresh
+        boosted_samples = scaled.copy()
+        if np.any(over_mask):
+            margin = peak_limit - soft_knee_thresh
+            over_val = abs_scaled[over_mask] - soft_knee_thresh
+            boosted_samples[over_mask] = np.sign(scaled[over_mask]) * (
+                soft_knee_thresh + margin * np.tanh(over_val / margin)
+            )
+
+        # Cắt lấy đoạn phát âm người nói (từ khung tiếng đầu tiên đến khung cuối cùng + padding 120ms)
+        pad_samples = int(0.12 * sr)
+        start_voiced = max(0, int(voiced_indices[0] * hop_len) - pad_samples)
+        end_voiced = min(samples.size, int(voiced_indices[-1] * hop_len + frame_len) + pad_samples)
+        boosted_voiced = boosted_samples[start_voiced:end_voiced]
+
+        gain_db = round(float(20.0 * np.log10(max(actual_gain, 1e-4))), 1)
+        final_rms = float(np.sqrt(np.mean(boosted_voiced * boosted_voiced))) if boosted_voiced.size > 0 else target_rms
+
+        logger.info(
+            "AGC Voice Boost: active_rms=%.4f -> boosted_rms=%.4f | Gain=%.2fx (%+.1f dB)",
+            active_rms,
+            final_rms,
+            actual_gain,
+            gain_db,
+        )
+
+        boosted_wav_bytes = self._encode_samples_to_wav_bytes(boosted_samples, sr)
+        return boosted_wav_bytes, boosted_voiced, gain_db
+
     def _extract_voiced_frames(self, samples: np.ndarray, sr: int) -> np.ndarray:
         """
         Kiểm tra năng lượng tiếng nói thực tế và chỉ giữ lại các khung (frames) có giọng người.
-        Loại bỏ hoàn toàn trường hợp im lặng hoặc tiếng ồn nền kích hoạt nhầm.
+        Hỗ trợ tiếp nhận cả giọng nói từ xa (âm lượng thấp) trước khi chuyển qua bộ AGC.
         """
-        if samples.size < int(0.45 * sr):
+        if samples.size < int(0.35 * sr):
             raise ValueError("Đoạn âm thanh quá ngắn. Vui lòng nói rõ câu mật khẩu vào điện thoại.")
 
         # Khử DC offset
@@ -267,12 +384,12 @@ class BiometricEngine:
         peak = float(np.max(np.abs(samples)))
         overall_rms = float(np.sqrt(np.mean(samples * samples)))
 
-        if peak < 0.045 or overall_rms < 0.012:
+        if peak < 0.020 or overall_rms < 0.005:
             raise ValueError("Không phát hiện giọng nói (âm lượng quá nhỏ hoặc chỉ có tiếng ồn nền).")
 
         frame_len = int(0.025 * sr)
         hop_len = int(0.010 * sr)
-        if samples.size < frame_len * 15:
+        if samples.size < frame_len * 10:
             raise ValueError("Đoạn thu âm quá ngắn. Vui lòng nói câu mật khẩu dài hơn.")
 
         # Tính RMS từng frame 25ms
@@ -282,14 +399,12 @@ class BiometricEngine:
             seg = samples[i * hop_len : i * hop_len + frame_len]
             frame_rms[i] = float(np.sqrt(np.mean(seg * seg)))
 
-        # Ngưỡng tiếng nói động dựa trên nền nhiễu nhưng không thấp hơn 0.022
         noise_floor = float(np.percentile(frame_rms, 20))
-        voice_thresh = max(0.022, noise_floor * 2.4, float(np.max(frame_rms)) * 0.18)
+        voice_thresh = max(0.012, noise_floor * 1.8, float(np.max(frame_rms)) * 0.14)
         voiced_mask = frame_rms >= voice_thresh
         voiced_count = int(np.sum(voiced_mask))
 
-        # Yêu cầu tối thiểu 30 frames có tiếng nói (~0.32 giây phát âm thực sự)
-        if voiced_count < 30:
+        if voiced_count < 18:
             raise ValueError("Chưa phát hiện câu nói rõ ràng (chỉ có tạp âm ngắn).")
 
         voiced_indices = np.where(voiced_mask)[0]
@@ -297,30 +412,29 @@ class BiometricEngine:
         end_sample = min(samples.size, int(voiced_indices[-1] * hop_len + frame_len))
         trimmed = samples[start_sample:end_sample]
 
-        if trimmed.size < int(0.40 * sr):
+        if trimmed.size < int(0.30 * sr):
             raise ValueError("Câu nói quá ngắn. Vui lòng đọc rõ câu mật khẩu vào điện thoại.")
 
-        # Chuẩn hóa biên độ (Peak normalization) trước khi đưa vào mô hình
         max_abs = float(np.max(np.abs(trimmed)))
         if max_abs > 1e-6:
             trimmed = trimmed / max_abs
         return trimmed
 
     def transcribe_vietnamese(self, audio_bytes: bytes) -> str:
-        """Nhận diện câu nói tiếng Việt (Transcript) từ đoạn ghi âm WAV."""
+        """Nhận diện câu nói tiếng Việt (Transcript) từ đoạn ghi âm WAV sau khi chuẩn hóa AGC."""
         if not self.asr_ready or self._sr is None or self._recognizer is None:
             return ""
         try:
-            # Kiểm tra trước xem có tiếng nói thực sự không, nếu chỉ là tiếng ồn/im lặng thì bỏ qua ngay
-            samples, sr = self._decode_audio_bytes(audio_bytes)
-            self._extract_voiced_frames(samples, sr)
+            # 1. Tự động chuẩn hóa & boost âm lượng về mức chuẩn (Target RMS = 0.14)
+            boosted_wav_bytes, _, _ = self.normalize_and_boost_voice(audio_bytes)
         except ValueError:
             return ""
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("normalize_and_boost_voice error in transcribe: %s", exc)
+            boosted_wav_bytes = audio_bytes
 
         try:
-            with self._sr.AudioFile(io.BytesIO(audio_bytes)) as source:
+            with self._sr.AudioFile(io.BytesIO(boosted_wav_bytes)) as source:
                 audio_data = self._recognizer.record(source)
             transcript = self._recognizer.recognize_google(audio_data, language="vi-VN")
             normalized = normalize_vietnamese_phrase(str(transcript))
@@ -335,11 +449,12 @@ class BiometricEngine:
 
     def extract_voice_embedding(self, audio_bytes: bytes) -> List[float]:
         """
-        Trích xuất vector đặc trưng giọng nói 192 chiều (L2-normalized, Zero-Mean).
-        Sử dụng SpeechBrain ECAPA-TDNN nếu đã nạp, hoặc bộ trích xuất MFCC-Cepstral + Harmonic 192-D.
+        Trích xuất vector đặc trưng giọng nói 192 chiều (L2-normalized, Zero-Mean)
+        sau khi đã chuẩn hóa và boost âm lượng về cùng một mức Target RMS chuẩn.
         """
-        samples, sr = self._decode_audio_bytes(audio_bytes)
-        voiced_samples = self._extract_voiced_frames(samples, sr)
+        # Tự động cân bằng & boost âm lượng về cùng mức Target RMS = 0.14
+        _, voiced_samples, _ = self.normalize_and_boost_voice(audio_bytes)
+        sr = 16000
 
         if self.speechbrain_ready and self.speaker_model is not None:
             import torch  # type: ignore
@@ -372,7 +487,7 @@ class BiometricEngine:
 
         for start in range(0, emphasized.size - frame_len, hop_len):
             seg = emphasized[start : start + frame_len]
-            if float(np.sqrt(np.mean(seg * seg))) < 0.03:
+            if float(np.sqrt(np.mean(seg * seg))) < 0.008:
                 continue
             win_seg = seg * window
             mag = np.abs(np.fft.rfft(win_seg, n=512))[:256]

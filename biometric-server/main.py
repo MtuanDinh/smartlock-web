@@ -302,8 +302,7 @@ async def transcribe_voice_audio(audio: UploadFile = File(...)) -> JSONResponse:
     """
     audio_bytes = await audio.read()
     try:
-        samples, sr = engine._decode_audio_bytes(audio_bytes)
-        engine._extract_voiced_frames(samples, sr)
+        boosted_wav, _, gain_db = engine.normalize_and_boost_voice(audio_bytes)
     except ValueError as exc:
         return JSONResponse(
             content={
@@ -314,7 +313,7 @@ async def transcribe_voice_audio(audio: UploadFile = File(...)) -> JSONResponse:
             }
         )
 
-    transcript = engine.transcribe_vietnamese(audio_bytes)
+    transcript = engine.transcribe_vietnamese(boosted_wav)
     if not transcript:
         return JSONResponse(
             content={
@@ -330,6 +329,7 @@ async def transcribe_voice_audio(audio: UploadFile = File(...)) -> JSONResponse:
             "ok": True,
             "hasSpeech": True,
             "transcript": transcript,
+            "agcGainDb": gain_db,
         }
     )
 
@@ -358,14 +358,15 @@ async def enroll_voice_from_phone(
 
     audio_bytes = await audio.read()
     try:
-        voice_emb = engine.extract_voice_embedding(audio_bytes)
+        boosted_wav, _, gain_db = engine.normalize_and_boost_voice(audio_bytes)
+        voice_emb = engine.extract_voice_embedding(boosted_wav)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"ok": False, "detail": str(exc)})
 
     # Lấy transcript đã xử lý từ điện thoại gửi lên hoặc trích xuất trực tiếp bằng ASR
     spoken_text = normalize_vietnamese_phrase(transcript or "")
     if not spoken_text:
-        spoken_text = engine.transcribe_vietnamese(audio_bytes)
+        spoken_text = engine.transcribe_vietnamese(boosted_wav)
 
     # Bắt buộc phải nhận diện được câu nói thực tế (tối thiểu 2 từ), tuyệt đối không tự bịa câu mặc định khi im lặng!
     words = spoken_text.split() if spoken_text else []
@@ -616,7 +617,8 @@ async def verify_voice_step1(
 
     audio_bytes = await audio.read()
     try:
-        probe_voice = engine.extract_voice_embedding(audio_bytes)
+        boosted_wav, _, gain_db = engine.normalize_and_boost_voice(audio_bytes)
+        probe_voice = engine.extract_voice_embedding(boosted_wav)
     except ValueError as exc:
         return JSONResponse(
             content={
@@ -629,7 +631,7 @@ async def verify_voice_step1(
 
     spoken_text = normalize_vietnamese_phrase(transcript or "")
     if not spoken_text:
-        spoken_text = engine.transcribe_vietnamese(audio_bytes)
+        spoken_text = engine.transcribe_vietnamese(boosted_wav)
 
     # FIX TRIỆT ĐỂ: Nếu không nói gì hoặc không nhận diện được câu nói -> Dừng ngay lập tức!
     if not spoken_text:
@@ -701,6 +703,7 @@ async def verify_voice_step1(
                 "voiceScore": round(best_voice_score, 3),
                 "phraseScore": round(best_phrase_score, 3),
                 "spokenText": spoken_text,
+                "agcGainDb": gain_db,
                 "reason": " • ".join(reason_parts)
                 or "Giọng nói hoặc câu mật khẩu không khớp.",
             }
@@ -718,6 +721,7 @@ async def verify_voice_step1(
                 "voiceScore": round(best_voice_score, 3),
                 "phraseScore": round(best_phrase_score, 3),
                 "spokenText": spoken_text,
+                "agcGainDb": gain_db,
                 "reason": f"Thành viên {best_user_name} chưa đăng ký dữ liệu khuôn mặt để xác thực Bước 2.",
             }
         )
@@ -733,12 +737,13 @@ async def verify_voice_step1(
     }
 
     logger.info(
-        "Voice Step 1 MATCHED user=%s (%s) spoken='%s' voice=%.3f phrase=%.3f",
+        "Voice Step 1 MATCHED user=%s (%s) spoken='%s' voice=%.3f phrase=%.3f agc_gain=%+.1f dB",
         best_user_id,
         best_user_name,
         spoken_text,
         best_voice_score,
         best_phrase_score,
+        gain_db,
     )
 
     return JSONResponse(
@@ -750,6 +755,7 @@ async def verify_voice_step1(
             "voiceScore": round(best_voice_score, 3),
             "phraseScore": round(best_phrase_score, 3),
             "spokenText": spoken_text,
+            "agcGainDb": gain_db,
             "expiresInSeconds": int(SESSION_TTL_SECONDS),
         }
     )

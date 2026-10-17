@@ -162,12 +162,20 @@
           </div>
         </div>
 
-        <!-- Live Audio Energy Meter -->
+        <!-- Live Audio Energy Meter & AGC Status -->
         <div class="w-56 h-2 bg-slate-800 rounded-full overflow-hidden mt-4 border border-slate-700/60">
           <div id="vad-meter" class="h-full bg-gradient-to-r from-sky-400 via-blue-500 to-emerald-400 transition-all duration-75" style="width: 4%"></div>
         </div>
-        <p class="text-[11px] font-mono text-slate-400 mt-1.5">
-          Tự động thu âm &amp; xử lý Transcript khi bạn nói câu mật khẩu
+        <div class="flex items-center gap-1.5 mt-2">
+          <span class="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">
+            ⚡ AGC BOOST: BẬT
+          </span>
+          <span id="agc-gain-badge" class="hidden text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/25 text-emerald-300 border border-emerald-400/30">
+            +0.0 dB
+          </span>
+        </div>
+        <p class="text-[11px] font-mono text-slate-400 mt-1">
+          Tự động cân bằng âm lượng dù nói xa hay nói gần
         </p>
       </div>
 
@@ -517,6 +525,16 @@
         offset += c.length;
       }
 
+      // Tự động đo RMS và chuẩn hóa âm lượng (Client AGC Normalization) về ngưỡng chuẩn Target RMS ~ 0.14
+      let sumSq = 0;
+      for (let i = 0; i < samples.length; i++) sumSq += samples[i] * samples[i];
+      const currentRms = Math.sqrt(sumSq / Math.max(1, samples.length));
+      const targetRms = 0.14;
+      let gain = 1.0;
+      if (currentRms > 0.005 && currentRms < targetRms) {
+        gain = Math.min(18.0, targetRms / currentRms);
+      }
+
       const buffer = new ArrayBuffer(44 + samples.length * 2);
       const view = new DataView(buffer);
       const writeStr = (pos, str) => {
@@ -538,8 +556,14 @@
 
       let idx = 44;
       for (let i = 0; i < samples.length; i++, idx += 2) {
-        const s = Math.max(-1, Math.min(1, samples[i]));
-        view.setInt16(idx, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        let s = samples[i] * gain;
+        // Soft-knee limiter qua hàm tanh để chống vỡ tiếng (anti-clipping)
+        if (Math.abs(s) > 0.75) {
+          const sign = Math.sign(s);
+          s = sign * (0.75 + 0.17 * Math.tanh((Math.abs(s) - 0.75) / 0.17));
+        }
+        const clamped = Math.max(-1, Math.min(1, s));
+        view.setInt16(idx, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
       }
       return new Blob([buffer], { type: 'audio/wav' });
     }
@@ -924,6 +948,12 @@
         teleTranscript.textContent = `"${recognizedTranscript}"`;
         vadStateLabel.textContent = 'ĐỐI CHIẾU AI';
 
+        const agcBadge = document.getElementById('agc-gain-badge');
+        if (agcBadge && transData.agcGainDb !== undefined) {
+          agcBadge.classList.remove('hidden');
+          agcBadge.textContent = `${transData.agcGainDb >= 0 ? '+' : ''}${transData.agcGainDb} dB`;
+        }
+
         const formData = new FormData();
         formData.append('audio', wavBlob, 'voice_16k.wav');
         formData.append('transcript', recognizedTranscript);
@@ -949,8 +979,9 @@
               data.detail || 'Vui lòng nói một câu mật khẩu từ 2 từ trở lên.';
             cooldownUntil = Date.now() + 1400;
           } else {
+            const agcStr = data.agcGainDb !== undefined ? ` (AGC: ${data.agcGainDb >= 0 ? '+' : ''}${data.agcGainDb}dB)` : '';
             teleTranscript.textContent = `"${data.voicePassphrase}" (ĐÃ LƯU)`;
-            teleScores.textContent = `SpeechBrain: 192-D OK`;
+            teleScores.textContent = `SpeechBrain: 192-D OK${agcStr}`;
             if (data.nextStep === 'waiting_face') {
               // Bắt đầu đếm ngược 10 giây để người dùng đặt khuôn mặt vào khung mô hình
               faceEnrollPrepStartAt = Date.now();
@@ -997,9 +1028,10 @@
           : `"${recognizedTranscript}"`;
 
         if (data.voiceScore !== undefined) {
+          const agcStr = data.agcGainDb !== undefined ? ` | AGC: ${data.agcGainDb >= 0 ? '+' : ''}${data.agcGainDb}dB` : '';
           teleScores.textContent = `Voice: ${Math.round(
             data.voiceScore * 100
-          )}% | Phrase: ${Math.round((data.phraseScore || 0) * 100)}%`;
+          )}% | Phrase: ${Math.round((data.phraseScore || 0) * 100)}%${agcStr}`;
         }
 
         if (data.matched && data.sessionToken) {
@@ -1348,10 +1380,10 @@
           const rms = Math.sqrt(sumSq / input.length);
 
           // Cập nhật nền nhiễu thích nghi khi không nói
-          if (!isSpeaking && rms < 0.04) {
+          if (!isSpeaking && rms < 0.032) {
             noiseFloor = 0.92 * noiseFloor + 0.08 * rms;
           }
-          const dynamicVoiceThreshold = Math.max(0.042, noiseFloor * 2.8);
+          const dynamicVoiceThreshold = Math.max(0.022, noiseFloor * 2.2);
 
           const pct = Math.min(100, Math.max(4, Math.round(rms * 600)));
           vadMeter.style.width = `${pct}%`;
@@ -1394,12 +1426,12 @@
                 const finalPeakRms = peakRmsInSegment;
                 resetVadBuffer();
 
-                // Chỉ gửi lên server khi thực sự có tối thiểu 6 khung giọng nói (~500ms phát âm liên tục)
-                // Loại bỏ hoàn toàn tiếng gõ nhẹ, tiếng ồn phòng hoặc khoảng lặng!
+                // Chỉ gửi lên server khi thực sự có tối thiểu 6 khung giọng nói (~450ms phát âm liên tục)
+                // Bộ AGC sẽ tự động boost âm lượng nếu tiếng nói ở cự ly xa hoặc âm lượng nhỏ
                 if (
                   finalVoicedFrames >= 6 &&
-                  finalVoicedSpan >= 450 &&
-                  finalPeakRms >= 0.048
+                  finalVoicedSpan >= 420 &&
+                  finalPeakRms >= 0.026
                 ) {
                   const wavBlob = encodeWav16kHz(captured);
                   void handleCapturedVoiceBlob(wavBlob);
