@@ -377,7 +377,12 @@ export const LockStatusHero: React.FC = () => {
                       : 'Đang tạm tắt xác thực từ ĐT'}
                   </span>
                   <a
-                    href={`${window.location.protocol}//${window.location.hostname}:8000/kiosk`}
+                    href={
+                      window.location.hostname === 'localhost' ||
+                      window.location.hostname === '127.0.0.1'
+                        ? `http://${window.location.hostname}:8000/kiosk`
+                        : `https://${window.location.hostname}:8443/kiosk`
+                    }
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-0.5 text-[10px] font-bold text-primary hover:underline"

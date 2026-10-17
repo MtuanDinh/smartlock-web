@@ -94,7 +94,12 @@ export const BiometricEnrollModal: React.FC<BiometricEnrollModalProps> = ({
 
   if (!user) return null;
 
-  const kioskUrl = `${window.location.protocol}//${window.location.hostname}:8000/kiosk`;
+  const isLocal =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1';
+  const kioskUrl = isLocal
+    ? `http://${window.location.hostname}:8000/kiosk`
+    : `https://${window.location.hostname}:8443/kiosk`;
 
   return (
     <Dialog

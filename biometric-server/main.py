@@ -1,13 +1,16 @@
 """
 FastAPI Biometric Server cho Smart Lock IoT:
-- Cung cấp giao diện Kiosk cô lập cho điện thoại tại `/kiosk` (chỉ làm Camera sau HD + Mic thu âm, không có quyền Admin).
-- Đồng bộ trực tiếp với Firebase Realtime Database:
-  + Luồng 1 (Enroll từ Điện thoại khi Admin bấm Thêm/Đổi trên Web): Theo dõi `SmartLock/Control/Biometric_Enroll`.
-  + Luồng 2 (Verify 2 bước tự động mở khóa): Xác thực Giọng nói + Câu nói mật khẩu (SpeechBrain + ASR) -> Xác thực Khuôn mặt từ Camera sau HD (FaceNet) -> Bật `Remote_Open = true`.
+- Chạy song song cả 2 cổng:
+  + HTTPS (cổng 8443): `https://<LAN-IP>:8443/kiosk` -> Bắt buộc cho trình duyệt điện thoại (Chrome/Safari)
+    cấp quyền `navigator.mediaDevices.getUserMedia` (WebRTC Mic VAD + Camera sau Full HD) qua mạng LAN.
+  + HTTP  (cổng 8000): `http://<LAN-IP>:8000/kiosk`  -> Tự động điều hướng sang HTTPS 8443 khi mở trên điện thoại.
 """
 
 from __future__ import annotations
 
+import asyncio
+import datetime
+import ipaddress
 import logging
 import os
 import secrets
@@ -17,6 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import requests
+import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -36,6 +40,76 @@ logger = logging.getLogger("biometric.server")
 
 BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BASE_DIR.parent
+CERT_FILE = BASE_DIR / "cert.pem"
+KEY_FILE = BASE_DIR / "key.pem"
+
+
+def _get_lan_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def ensure_self_signed_ssl_cert(lan_ip: str) -> bool:
+    """
+    Tạo chứng chỉ SSL tự ký (SAN IP + localhost) để trình duyệt trên điện thoại
+    cho phép bật Camera sau & Microphone (Secure Context HTTPS) khi truy cập qua IP LAN.
+    """
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.x509.oid import NameOID
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subject = issuer = x509.Name(
+            [
+                x509.NameAttribute(NameOID.COUNTRY_NAME, "VN"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "SmartLock IoT"),
+                x509.NameAttribute(NameOID.COMMON_NAME, lan_ip),
+            ]
+        )
+
+        san_list = [
+            x509.DNSName("localhost"),
+            x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
+        ]
+        try:
+            san_list.append(x509.IPAddress(ipaddress.ip_address(lan_ip)))
+        except ValueError:
+            pass
+
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now_utc - datetime.timedelta(days=1))
+            .not_valid_after(now_utc + datetime.timedelta(days=3650))
+            .add_extension(x509.SubjectAlternativeName(san_list), critical=False)
+            .sign(key, hashes.SHA256())
+        )
+
+        KEY_FILE.write_bytes(
+            key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
+        CERT_FILE.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+        logger.info("Generated SSL certificate for https://%s:8443/kiosk", lan_ip)
+        return True
+    except Exception as exc:
+        logger.warning("Could not generate SSL certificate: %s", exc)
+        return False
 
 
 def _load_firebase_db_url() -> str:
@@ -60,7 +134,7 @@ engine = BiometricEngine()
 
 app = FastAPI(
     title="SmartLock Biometric AI Server (SpeechBrain + ASR + FaceNet)",
-    version="2.0.0",
+    version="2.1.0",
 )
 
 app.add_middleware(
@@ -71,21 +145,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Lưu các phiên đã qua Bước 1 (Giọng nói + Câu mật khẩu) chờ Bước 2 (Khuôn mặt Camera sau)
-# sessionToken -> { userId, userName, voiceScore, phraseScore, spokenText, expiresAt }
 VOICE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 SESSION_TTL_SECONDS = 35.0
-
-
-def _get_lan_ip() -> str:
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
 
 
 def fb_get(path: str) -> Any:
@@ -116,15 +177,6 @@ def fb_post(path: str, data: Any) -> Any:
     return resp.json()
 
 
-def fb_delete(path: str) -> None:
-    url = f"{FIREBASE_DB_URL}/{path.lstrip('/')}.json"
-    resp = requests.delete(url, timeout=6)
-    resp.raise_for_status()
-
-
-# =============================================================================
-# GIAO DIỆN ĐIỆN THOẠI KIOSK (/kiosk) — CÔ LẬP HOÀN TOÀN KHỎI WEB ADMIN
-# =============================================================================
 @app.get("/kiosk")
 def serve_phone_kiosk() -> FileResponse:
     kiosk_path = BASE_DIR / "static" / "kiosk.html"
@@ -147,19 +199,16 @@ def get_biometric_status() -> Dict[str, Any]:
         "biometricMode": biometric_mode,
         "lockdown": lockdown,
         "enrollState": enroll_state,
-        "kioskUrl": f"http://{lan_ip}:8000/kiosk",
+        "lanIp": lan_ip,
+        "kioskUrl": f"https://{lan_ip}:8443/kiosk",
+        "kioskHttpUrl": f"http://{lan_ip}:8000/kiosk",
         "models": engine.get_status(),
     }
 
 
 @app.get("/api/biometrics/kiosk-state")
 def get_kiosk_state() -> Dict[str, Any]:
-    """
-    Endpoint dành riêng cho Điện thoại Kiosk (/kiosk) hỏi trạng thái mỗi 1.2 giây:
-    - Nếu Admin đang bật lệnh thu mẫu tại `SmartLock/Control/Biometric_Enroll.active == true`,
-      điện thoại tự động chuyển sang chế độ ĐĂNG KÝ (thu giọng nói / chụp khuôn mặt bằng cam sau HD).
-    - Ngược lại, điện thoại ở chế độ TRỰC MỞ KHÓA tự động (Hands-free VAD + Rear Camera Face Scan).
-    """
+    lan_ip = _get_lan_ip()
     control = fb_get("SmartLock/Control") or {}
     biometric_mode = bool(control.get("Biometric_Mode", True))
     lockdown = bool(control.get("Lockdown", False))
@@ -168,6 +217,8 @@ def get_kiosk_state() -> Dict[str, Any]:
 
     return {
         "mode": "enroll" if is_enrolling else "verify",
+        "lanIp": lan_ip,
+        "httpsKioskUrl": f"https://{lan_ip}:8443/kiosk",
         "biometricMode": biometric_mode,
         "lockdown": lockdown,
         "enroll": {
@@ -183,22 +234,12 @@ def get_kiosk_state() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
-# LUỒNG A: ĐĂNG KÝ / CẬP NHẬT GIỌNG NÓI & KHUÔN MẶT TỪ ĐIỆN THOẠI
-# =============================================================================
 @app.post("/api/biometrics/enroll-voice")
 async def enroll_voice_from_phone(
     audio: UploadFile = File(...),
     userId: Optional[str] = Form(None),
     passphrase: Optional[str] = Form(None),
 ) -> JSONResponse:
-    """
-    Nhận file ghi âm 16kHz WAV từ mic điện thoại khi đang ở chế độ Đăng ký:
-    1. Trích xuất vector 192 chiều bằng SpeechBrain.
-    2. Nhận diện câu nói mật khẩu tiếng Việt bằng ASR (hoặc dùng câu mật khẩu Admin đã nhập).
-    3. Lưu vào `/SmartLock/Biometrics/{userId}` và cập nhật `/SmartLock/Users/{userId}`.
-    4. Nếu `target == 'both'`, chuyển bước trên điện thoại sang `waiting_face` (chụp cam sau HD).
-    """
     enroll = fb_get("SmartLock/Control/Biometric_Enroll") or {}
     target_user_id = (userId or str(enroll.get("userId", ""))).strip()
     target_user_name = str(enroll.get("userName", "")).strip()
@@ -218,7 +259,6 @@ async def enroll_voice_from_phone(
 
     spoken_text = engine.transcribe_vietnamese(audio_bytes)
 
-    # Nếu Admin đã chỉ định câu mật khẩu trước, kiểm tra xem người dùng có đọc đúng câu đó không
     if expected_phrase and spoken_text:
         sim = compute_phrase_similarity(spoken_text, expected_phrase)
         if sim < 0.65:
@@ -239,7 +279,6 @@ async def enroll_voice_from_phone(
 
     now_ms = int(time.time() * 1000)
 
-    # Lưu vào /SmartLock/Biometrics/{userId} và /SmartLock/Users/{userId}
     fb_patch(
         f"SmartLock/Biometrics/{target_user_id}",
         {
@@ -257,7 +296,6 @@ async def enroll_voice_from_phone(
         },
     )
 
-    # Cập nhật trạng thái điều khiển phiên thu mẫu trên điện thoại
     if enroll.get("active") and str(enroll.get("userId")) == target_user_id:
         if enroll_target == "both":
             fb_patch(
@@ -302,12 +340,6 @@ async def enroll_face_from_phone(
     image: UploadFile = File(...),
     userId: Optional[str] = Form(None),
 ) -> JSONResponse:
-    """
-    Nhận ảnh chụp độ phân giải cao từ Camera sau của điện thoại khi đang ở chế độ Đăng ký:
-    1. Phát hiện khuôn mặt & trích xuất vector 512 chiều bằng FaceNet.
-    2. Lưu vào `/SmartLock/Biometrics/{userId}` và cập nhật `/SmartLock/Users/{userId}`.
-    3. Hoàn tất phiên `Biometric_Enroll` (`active = false, step = 'completed'`).
-    """
     enroll = fb_get("SmartLock/Control/Biometric_Enroll") or {}
     target_user_id = (userId or str(enroll.get("userId", ""))).strip()
     target_user_name = str(enroll.get("userName", "")).strip()
@@ -361,18 +393,8 @@ async def enroll_face_from_phone(
     )
 
 
-# =============================================================================
-# LUỒNG B: XÁC THỰC KÉP 2 BƯỚC KHÔNG CHẠM ĐỂ MỞ KHÓA TỪ ĐIỆN THOẠI KIOSK
-# =============================================================================
 @app.post("/api/biometrics/verify-voice")
 async def verify_voice_step1(audio: UploadFile = File(...)) -> JSONResponse:
-    """
-    Bước 1 (Tự động qua VAD trên điện thoại):
-    - Kiểm tra đồng thời:
-      1. Vector giọng nói 192-D từ SpeechBrain khớp với thành viên đang `active`.
-      2. Câu nói tiếng Việt nhận diện qua ASR khớp với `voicePassphrase` đã lưu của thành viên đó.
-    - Chỉ khi cả 2 cùng khớp mới cấp `sessionToken` để điện thoại bật Camera sau HD quét khuôn mặt.
-    """
     control = fb_get("SmartLock/Control") or {}
     if bool(control.get("Lockdown", False)):
         return JSONResponse(
@@ -425,7 +447,6 @@ async def verify_voice_step1(audio: UploadFile = File(...)) -> JSONResponse:
             if spoken_text:
                 p_score = compute_phrase_similarity(spoken_text, expected_phrase)
             else:
-                # Nếu ASR không có internet tạm thời, yêu cầu điểm giọng nói SpeechBrain cực cao (>= 0.82)
                 p_score = 0.80 if v_score >= 0.82 else 0.0
         else:
             p_score = 1.0
@@ -459,7 +480,6 @@ async def verify_voice_step1(audio: UploadFile = File(...)) -> JSONResponse:
             }
         )
 
-    # Kiểm tra thành viên này đã đăng ký khuôn mặt chưa
     user_bio = bio_map.get(best_user_id) or {}
     if not isinstance(user_bio.get("faceEmbedding"), list) or len(user_bio["faceEmbedding"]) == 0:
         return JSONResponse(
@@ -498,13 +518,6 @@ async def verify_face_step2(
     sessionToken: str = Form(...),
     image: UploadFile = File(...),
 ) -> JSONResponse:
-    """
-    Bước 2 (Tự động chụp từ Camera sau HD của điện thoại):
-    - Kiểm tra `sessionToken` từ Bước 1 còn hiệu lực.
-    - Trích xuất vector 512-D bằng FaceNet từ khung hình Camera sau độ phân giải cao.
-    - So khớp 1:1 với `faceEmbedding` của đúng thành viên đã qua Bước 1.
-    - Nếu đạt ngưỡng: Gửi tín hiệu mở khóa `/SmartLock/Control/Remote_Open = true` và ghi Log.
-    """
     session = VOICE_SESSIONS.get(sessionToken)
     if not session or time.time() > float(session["expiresAt"]):
         VOICE_SESSIONS.pop(sessionToken, None)
@@ -554,7 +567,6 @@ async def verify_face_step2(
             }
         )
 
-    # Xác thực 2 bước thành công -> Xóa sessionToken, kích hoạt Remote_Open và ghi nhật ký
     VOICE_SESSIONS.pop(sessionToken, None)
     now_ms = int(time.time() * 1000)
 
@@ -582,7 +594,32 @@ async def verify_face_step2(
     )
 
 
-if __name__ == "__main__":
-    import uvicorn  # type: ignore
+async def _serve_dual_http_and_https() -> None:
+    lan_ip = _get_lan_ip()
+    has_ssl = ensure_self_signed_ssl_cert(lan_ip)
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    http_config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
+    http_server = uvicorn.Server(http_config)
+
+    if has_ssl and CERT_FILE.exists() and KEY_FILE.exists():
+        https_config = uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=8443,
+            ssl_certfile=str(CERT_FILE),
+            ssl_keyfile=str(KEY_FILE),
+            log_level="info",
+        )
+        https_server = uvicorn.Server(https_config)
+        logger.info(
+            " Dual-stack active: HTTP on http://%s:8000/kiosk AND HTTPS on https://%s:8443/kiosk",
+            lan_ip,
+            lan_ip,
+        )
+        await asyncio.gather(http_server.serve(), https_server.serve())
+    else:
+        await http_server.serve()
+
+
+if __name__ == "__main__":
+    asyncio.run(_serve_dual_http_and_https())
