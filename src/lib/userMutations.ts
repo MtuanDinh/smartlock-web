@@ -1,5 +1,5 @@
 import { PATHS } from './paths';
-import type { UserStatus } from '../types';
+import type { BiometricEnrollTarget, UserStatus } from '../types';
 
 export type MultiPathUpdates = Record<string, unknown>;
 
@@ -128,7 +128,8 @@ export function buildToggleStatusUpdates(
 
 /**
  * Tạo payload multi-path update khi xóa vĩnh viễn thành viên.
- * Nếu thành viên đang active thì xóa cả bản sao trong Passwords và RFID.
+ * Nếu thành viên đang active thì xóa cả bản sao trong Passwords và RFID,
+ * đồng thời dọn sạch dữ liệu sinh trắc học (Giọng nói & Khuôn mặt).
  */
 export function buildDeleteUserUpdates(
   userId: string,
@@ -141,6 +142,7 @@ export function buildDeleteUserUpdates(
 
   const updates: MultiPathUpdates = {
     [PATHS.USER_DETAIL(userId)]: null,
+    [PATHS.BIOMETRIC_ITEM(userId)]: null,
   };
 
   if (status === 'active') {
@@ -154,3 +156,25 @@ export function buildDeleteUserUpdates(
 
   return updates;
 }
+
+/**
+ * Tạo payload multi-path update khi xóa mẫu Giọng nói / Khuôn mặt của thành viên.
+ */
+export function buildClearBiometricUpdates(
+  userId: string,
+  target: BiometricEnrollTarget
+): MultiPathUpdates {
+  const updates: MultiPathUpdates = {};
+  if (target === 'voice' || target === 'both') {
+    updates[`${PATHS.USER_DETAIL(userId)}/hasVoice`] = false;
+    updates[`${PATHS.USER_DETAIL(userId)}/voicePassphrase`] = null;
+    updates[`${PATHS.BIOMETRIC_ITEM(userId)}/voiceEmbedding`] = null;
+    updates[`${PATHS.BIOMETRIC_ITEM(userId)}/voicePassphrase`] = null;
+  }
+  if (target === 'face' || target === 'both') {
+    updates[`${PATHS.USER_DETAIL(userId)}/hasFace`] = false;
+    updates[`${PATHS.BIOMETRIC_ITEM(userId)}/faceEmbedding`] = null;
+  }
+  return updates;
+}
+

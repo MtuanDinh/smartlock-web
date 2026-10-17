@@ -1,6 +1,8 @@
 import type { SmartLockService } from './service';
 import type {
   AuthUser,
+  BiometricEnrollCommand,
+  BiometricEnrollTarget,
   LogEntry,
   MutationResult,
   User,
@@ -19,7 +21,7 @@ export function createMockService(): SmartLockService {
 
   let currentUser: AuthUser | null = {
     uid: 'mock-admin-uid',
-    email: 'admin@smartlock.local',
+    email: 'admin@example.com',
   };
 
   let isClientConnected = true;
@@ -31,6 +33,17 @@ export function createMockService(): SmartLockService {
   let targetUserId = '';
   let targetUserName = '';
   let hasUnsyncedChanges = false;
+  let biometricMode = true;
+  let biometricEnrollState: BiometricEnrollCommand = {
+    active: false,
+    userId: '',
+    userName: '',
+    target: 'both',
+    expectedPassphrase: '',
+    step: 'idle',
+    message: '',
+    updatedAt: 0,
+  };
 
   let users: User[] = [
     {
@@ -39,6 +52,10 @@ export function createMockService(): SmartLockService {
       pass: '012345',
       card: 'A1B2C3D4',
       status: 'active',
+      hasVoice: true,
+      hasFace: true,
+      voicePassphrase: 'mở cửa cho nguyễn văn an',
+      biometricUpdatedAt: now - 3 * hour,
     },
     {
       id: 'user_1700000002',
@@ -46,6 +63,10 @@ export function createMockService(): SmartLockService {
       pass: '2468',
       card: 'E5F60718',
       status: 'active',
+      hasVoice: true,
+      hasFace: false,
+      voicePassphrase: 'mở khóa thông minh',
+      biometricUpdatedAt: now - 5 * hour,
     },
     {
       id: 'user_1700000003',
@@ -197,6 +218,8 @@ export function createMockService(): SmartLockService {
   const lockdownSubs = new Set<(l: boolean) => void>();
   const remoteOpenSubs = new Set<(r: boolean) => void>();
   const addCardSubs = new Set<(a: boolean) => void>();
+  const biometricModeSubs = new Set<(m: boolean) => void>();
+  const biometricEnrollSubs = new Set<(e: BiometricEnrollCommand) => void>();
   const usersSubs = new Set<(u: User[]) => void>();
   const recentLogsSubs = new Set<{ count: number; cb: (l: LogEntry[]) => void }>();
   const logsSubs = new Set<{ limit: number; cb: (l: LogEntry[]) => void }>();
@@ -204,6 +227,11 @@ export function createMockService(): SmartLockService {
   function notifyUsers() {
     const snapshot = [...users];
     usersSubs.forEach((cb) => cb(snapshot));
+  }
+
+  function notifyBiometricEnroll() {
+    const snapshot = { ...biometricEnrollState };
+    biometricEnrollSubs.forEach((cb) => cb(snapshot));
   }
 
   function notifyLogs() {
@@ -329,6 +357,75 @@ export function createMockService(): SmartLockService {
       }
     },
 
+    // Biometric Control & Remote Phone Enrollment
+    subscribeBiometricMode(cb) {
+      biometricModeSubs.add(cb);
+      cb(biometricMode);
+      return () => biometricModeSubs.delete(cb);
+    },
+
+    async setBiometricMode(enabled) {
+      biometricMode = enabled;
+      biometricModeSubs.forEach((cb) => cb(biometricMode));
+      return { status: 'completed' };
+    },
+
+    subscribeBiometricEnroll(cb) {
+      biometricEnrollSubs.add(cb);
+      cb({ ...biometricEnrollState });
+      return () => biometricEnrollSubs.delete(cb);
+    },
+
+    async startBiometricEnrollOnPhone({
+      userId,
+      userName,
+      target,
+      expectedPassphrase,
+    }) {
+      biometricEnrollState = {
+        active: true,
+        userId,
+        userName,
+        target,
+        expectedPassphrase: expectedPassphrase.trim().toLowerCase(),
+        step: target === 'face' ? 'waiting_face' : 'waiting_voice',
+        message:
+          target === 'face'
+            ? `Đang chờ ${userName} nhìn vào Camera sau (HD) của điện thoại...`
+            : `Đang chờ ${userName} đọc câu mật khẩu vào mic điện thoại...`,
+        updatedAt: Date.now(),
+      };
+      notifyBiometricEnroll();
+    },
+
+    async cancelBiometricEnrollOnPhone() {
+      biometricEnrollState = {
+        ...biometricEnrollState,
+        active: false,
+        step: 'cancelled',
+        message: 'Đã hủy phiên thu mẫu sinh trắc học trên điện thoại.',
+        updatedAt: Date.now(),
+      };
+      notifyBiometricEnroll();
+    },
+
+    async clearUserBiometrics(userId, target: BiometricEnrollTarget) {
+      users = users.map((u) => {
+        if (u.id !== userId) return u;
+        return {
+          ...u,
+          hasVoice: target === 'voice' || target === 'both' ? false : u.hasVoice,
+          voicePassphrase:
+            target === 'voice' || target === 'both'
+              ? undefined
+              : u.voicePassphrase,
+          hasFace: target === 'face' || target === 'both' ? false : u.hasFace,
+        };
+      });
+      notifyUsers();
+      return { status: 'completed' };
+    },
+
     subscribeUsers(cb) {
       usersSubs.add(cb);
       cb([...users]);
@@ -336,8 +433,9 @@ export function createMockService(): SmartLockService {
     },
 
     async addUser(name, pin): Promise<MutationResult> {
+      const userId = `user_${Date.now()}`;
       const newUser: User = {
-        id: `user_${Date.now()}`,
+        id: userId,
         name,
         pass: String(pin ?? '').trim(),
         card: '',
@@ -346,7 +444,7 @@ export function createMockService(): SmartLockService {
       users = [...users, newUser];
       notifyUsers();
       pushLog('HỆ THỐNG', 'Đã làm mới Cache Offline');
-      return { status: 'completed' };
+      return { status: 'completed', userId };
     },
 
     async editUserName(userId, newName): Promise<MutationResult> {
@@ -483,6 +581,71 @@ export function createMockService(): SmartLockService {
       simulateIntrusionAlert() {
         pushLog('Cảnh báo: Sai Pass', 'Khách lạ');
       },
+      simulatePhoneBiometricCapture() {
+        if (!biometricEnrollState.active) return;
+        const uid = biometricEnrollState.userId;
+        const uname = biometricEnrollState.userName;
+        const phrase =
+          biometricEnrollState.expectedPassphrase ||
+          `mở cửa cho ${uname.toLowerCase()}`;
+
+        if (biometricEnrollState.step === 'waiting_voice') {
+          users = users.map((u) =>
+            u.id === uid
+              ? {
+                  ...u,
+                  hasVoice: true,
+                  voicePassphrase: phrase,
+                  biometricUpdatedAt: Date.now(),
+                }
+              : u
+          );
+          notifyUsers();
+
+          if (biometricEnrollState.target === 'both') {
+            biometricEnrollState = {
+              ...biometricEnrollState,
+              step: 'waiting_face',
+              expectedPassphrase: phrase,
+              message: `Đã thu giọng nói ("${phrase}")! Đang chờ ${uname} nhìn vào Camera sau HD của điện thoại...`,
+              updatedAt: Date.now(),
+            };
+          } else {
+            biometricEnrollState = {
+              ...biometricEnrollState,
+              active: false,
+              step: 'completed',
+              expectedPassphrase: phrase,
+              message: `Đã thu giọng nói & câu mật khẩu cho ${uname} thành công!`,
+              updatedAt: Date.now(),
+            };
+          }
+          notifyBiometricEnroll();
+          return;
+        }
+
+        if (biometricEnrollState.step === 'waiting_face') {
+          users = users.map((u) =>
+            u.id === uid
+              ? {
+                  ...u,
+                  hasFace: true,
+                  biometricUpdatedAt: Date.now(),
+                }
+              : u
+          );
+          notifyUsers();
+          biometricEnrollState = {
+            ...biometricEnrollState,
+            active: false,
+            step: 'completed',
+            message: `Đã lưu khuôn mặt HD (1920x1080) từ Camera sau cho ${uname} thành công!`,
+            updatedAt: Date.now(),
+          };
+          notifyBiometricEnroll();
+        }
+      },
     },
   };
 }
+

@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { UserPlus, UserPen, Sparkles, AlertCircle, Info } from 'lucide-react';
+import {
+  UserPlus,
+  UserPen,
+  Sparkles,
+  AlertCircle,
+  Info,
+  Smartphone,
+  Mic,
+  Camera,
+} from 'lucide-react';
 import { Dialog } from '../../components/ui/Dialog';
 import { Button } from '../../components/ui/Button';
 import {
@@ -7,7 +16,7 @@ import {
   validatePin,
   validateUserName,
 } from '../../lib/validators';
-import type { User } from '../../types';
+import type { BiometricEnrollTarget, User } from '../../types';
 
 export interface UserFormModalProps {
   open: boolean;
@@ -17,8 +26,13 @@ export interface UserFormModalProps {
   existingPasswords: string[];
   isSubmitting: boolean;
   isClientConnected: boolean;
-  onSubmitAdd: (normalizedName: string, pin: string) => Promise<boolean>;
+  onSubmitAdd: (normalizedName: string, pin: string) => Promise<string | false>;
   onSubmitEditName: (user: User, normalizedNewName: string) => Promise<boolean>;
+  onTriggerBiometricAfterAdd?: (
+    createdUser: User,
+    target: BiometricEnrollTarget,
+    passphrase: string
+  ) => void;
 }
 
 export const UserFormModal: React.FC<UserFormModalProps> = ({
@@ -31,15 +45,21 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   isClientConnected,
   onSubmitAdd,
   onSubmitEditName,
+  onTriggerBiometricAfterAdd,
 }) => {
   const [rawName, setRawName] = useState('');
   const [rawPin, setRawPin] = useState('');
+  const [enrollOnPhoneAfterAdd, setEnrollOnPhoneAfterAdd] = useState(false);
+  const [enrollTarget, setEnrollTarget] =
+    useState<BiometricEnrollTarget>('both');
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setRawName(mode === 'editName' && targetUser ? targetUser.name : '');
       setRawPin('');
+      setEnrollOnPhoneAfterAdd(false);
+      setEnrollTarget('both');
       setFormError(null);
     }
   }, [open, mode, targetUser]);
@@ -66,9 +86,25 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
         setFormError(pinCheck.error || 'Mã PIN không hợp lệ.');
         return;
       }
-      const ok = await onSubmitAdd(nameCheck.normalizedName, rawPin.trim());
-      if (ok) {
+      const createdUserId = await onSubmitAdd(
+        nameCheck.normalizedName,
+        rawPin.trim()
+      );
+      if (createdUserId) {
         onOpenChange(false);
+        if (enrollOnPhoneAfterAdd && onTriggerBiometricAfterAdd) {
+          onTriggerBiometricAfterAdd(
+            {
+              id: createdUserId,
+              name: nameCheck.normalizedName,
+              pass: rawPin.trim(),
+              card: '',
+              status: 'active',
+            },
+            enrollTarget,
+            ''
+          );
+        }
       }
     } else if (mode === 'editName' && targetUser) {
       const ok = await onSubmitEditName(targetUser, nameCheck.normalizedName);
@@ -116,7 +152,9 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
                 : undefined
             }
           >
-            Lưu Thông Tin
+            {mode === 'add' && enrollOnPhoneAfterAdd
+              ? 'Lưu & Thu Mẫu Trên Điện Thoại'
+              : 'Lưu Thông Tin'}
           </Button>
         </>
       }
@@ -175,31 +213,105 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
         </div>
 
         {mode === 'add' && (
-          <div>
-            <label
-              htmlFor="modal-user-pin"
-              className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-text-secondary"
-            >
-              Mã PIN mở cửa (Tùy chọn, 4–6 chữ số)
-            </label>
-            <input
-              id="modal-user-pin"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={6}
-              value={rawPin}
-              onChange={(e) => {
-                setRawPin(e.target.value.replace(/[^0-9]/g, ''));
-                if (formError) setFormError(null);
-              }}
-              placeholder="Nhập 4–6 chữ số (bỏ trống nếu chỉ dùng thẻ)"
-              className="min-h-[44px] w-full rounded-xl border border-border-strong bg-bg-elevated px-3.5 py-2 font-mono text-sm tracking-widest text-text-primary placeholder:font-sans placeholder:tracking-normal placeholder:text-text-muted focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            />
-            <p className="mt-1 text-xs text-text-muted">
-              Hỗ trợ giữ nguyên chữ số 0 ở đầu (VD: 012345).
-            </p>
-          </div>
+          <>
+            <div>
+              <label
+                htmlFor="modal-user-pin"
+                className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-text-secondary"
+              >
+                Mã PIN mở cửa (Tùy chọn, 4–6 chữ số)
+              </label>
+              <input
+                id="modal-user-pin"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={rawPin}
+                onChange={(e) => {
+                  setRawPin(e.target.value.replace(/[^0-9]/g, ''));
+                  if (formError) setFormError(null);
+                }}
+                placeholder="Nhập 4–6 chữ số (bỏ trống nếu chỉ dùng thẻ/sinh trắc học)"
+                className="min-h-[44px] w-full rounded-xl border border-border-strong bg-bg-elevated px-3.5 py-2 font-mono text-sm tracking-widest text-text-primary placeholder:font-sans placeholder:tracking-normal placeholder:text-text-muted focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+              <p className="mt-1 text-xs text-text-muted">
+                Hỗ trợ giữ nguyên chữ số 0 ở đầu (VD: 012345).
+              </p>
+            </div>
+
+            {/* Tùy chọn thu Giọng nói & Khuôn mặt từ Điện thoại ngay sau khi tạo */}
+            <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low/50 p-3.5 space-y-3">
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={enrollOnPhoneAfterAdd}
+                  onChange={(e) => setEnrollOnPhoneAfterAdd(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary/30"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-on-surface flex items-center gap-1.5">
+                    <Smartphone className="h-3.5 w-3.5 text-primary" />
+                    <span>
+                      Đăng ký Giọng nói &amp; Khuôn mặt qua Điện thoại (Tùy chọn)
+                    </span>
+                  </span>
+                  <p className="text-on-surface-variant mt-0.5 leading-relaxed">
+                    Phát lệnh sang điện thoại Kiosk (/kiosk) để thu giọng nói (SpeechBrain) và chụp khuôn mặt bằng Camera sau HD ngay sau khi tạo. Bạn cũng có thể bỏ qua và thêm sau.
+                  </p>
+                </div>
+              </label>
+
+              {enrollOnPhoneAfterAdd && (
+                <div className="space-y-2.5 pt-2 border-t border-outline-variant/30">
+                  <div className="grid grid-cols-3 gap-1.5 text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setEnrollTarget('both')}
+                      className={`py-2 px-2 rounded-lg border transition flex items-center justify-center gap-1 ${
+                        enrollTarget === 'both'
+                          ? 'border-primary bg-primary/15 text-primary'
+                          : 'border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant'
+                      }`}
+                    >
+                      <Mic className="h-3 w-3" />
+                      <span>Cả Giọng + Mặt</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEnrollTarget('voice')}
+                      className={`py-2 px-2 rounded-lg border transition flex items-center justify-center gap-1 ${
+                        enrollTarget === 'voice'
+                          ? 'border-primary bg-primary/15 text-primary'
+                          : 'border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant'
+                      }`}
+                    >
+                      <Mic className="h-3 w-3" />
+                      <span>Chỉ Giọng nói</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEnrollTarget('face')}
+                      className={`py-2 px-2 rounded-lg border transition flex items-center justify-center gap-1 ${
+                        enrollTarget === 'face'
+                          ? 'border-primary bg-primary/15 text-primary'
+                          : 'border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant'
+                      }`}
+                    >
+                      <Camera className="h-3 w-3" />
+                      <span>Chỉ Khuôn mặt</span>
+                    </button>
+                  </div>
+
+                  {enrollTarget !== 'face' && (
+                    <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                      <strong>Không cần nhập câu lệnh trước:</strong> Người dùng chỉ cần nói bất kỳ câu mật khẩu nào (tối thiểu 2 từ) vào mic điện thoại &mdash; hệ thống tự động xử lý Transcript và lưu lên Server.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {formError && (
@@ -215,3 +327,4 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
     </Dialog>
   );
 };
+

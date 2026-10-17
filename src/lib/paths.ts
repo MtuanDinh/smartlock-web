@@ -15,6 +15,8 @@ export const PATHS = {
     ADD_CARD_MODE: 'SmartLock/Control/Add_Card_Mode',
     TARGET_USER: 'SmartLock/Control/Target_User',
     TARGET_NAME: 'SmartLock/Control/Target_Name',
+    BIOMETRIC_MODE: 'SmartLock/Control/Biometric_Mode',
+    BIOMETRIC_ENROLL: 'SmartLock/Control/Biometric_Enroll',
   },
   LOGS: 'SmartLock/Logs',
   USERS: 'SmartLock/Users',
@@ -24,6 +26,8 @@ export const PATHS = {
   PASSWORD_ITEM: (pin: string) => `SmartLock/Passwords/${pin}`,
   RFID: 'SmartLock/RFID',
   RFID_ITEM: (uid: string) => `SmartLock/RFID/${uid}`,
+  BIOMETRICS: 'SmartLock/Biometrics',
+  BIOMETRIC_ITEM: (userId: string) => `SmartLock/Biometrics/${userId}`,
 } as const;
 
 export const ONLINE_THRESHOLD_MS =

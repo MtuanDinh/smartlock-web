@@ -24,12 +24,15 @@ import { PATHS } from './paths';
 import {
   buildAddUserUpdates,
   buildChangePinUpdates,
+  buildClearBiometricUpdates,
   buildDeleteUserUpdates,
   buildEditNameUpdates,
   buildToggleStatusUpdates,
 } from './userMutations';
 import type { SmartLockService } from './service';
 import type {
+  BiometricEnrollStep,
+  BiometricEnrollTarget,
   LogEntry,
   MutationResult,
   User,
@@ -299,6 +302,109 @@ export function createFirebaseService(
 
     triggerNeedSync,
 
+    // Biometric Control & Remote Phone Enrollment
+    subscribeBiometricMode(cb) {
+      const bioModeRef = deps.ref(deps.db, PATHS.CONTROL.BIOMETRIC_MODE);
+      return deps.onValue(bioModeRef, (snap) => {
+        const val = snap.val();
+        cb(val === null || val === undefined ? true : Boolean(val));
+      });
+    },
+
+    async setBiometricMode(enabled) {
+      const bioModeRef = deps.ref(deps.db, PATHS.CONTROL.BIOMETRIC_MODE);
+      const p = deps.set(bioModeRef, enabled);
+      const race = await raceWithUiTimeout(
+        p,
+        deps.writeTimeoutMs ?? UI_WRITE_TIMEOUT_MS
+      );
+      if (race === 'timed_out') {
+        void p.catch(() => {});
+        return { status: 'queued_offline' };
+      }
+      await p;
+      return { status: 'completed' };
+    },
+
+    subscribeBiometricEnroll(cb) {
+      const enrollRef = deps.ref(deps.db, PATHS.CONTROL.BIOMETRIC_ENROLL);
+      return deps.onValue(enrollRef, (snap) => {
+        const val = snap.val();
+        if (!val || typeof val !== 'object') {
+          cb({
+            active: false,
+            userId: '',
+            userName: '',
+            target: 'both',
+            expectedPassphrase: '',
+            step: 'idle',
+            message: '',
+            updatedAt: 0,
+          });
+          return;
+        }
+        cb({
+          active: Boolean(val.active),
+          userId: String(val.userId ?? ''),
+          userName: String(val.userName ?? ''),
+          target: (val.target === 'voice' || val.target === 'face'
+            ? val.target
+            : 'both') as BiometricEnrollTarget,
+          expectedPassphrase: String(val.expectedPassphrase ?? ''),
+          step: (val.step ?? 'idle') as BiometricEnrollStep,
+          message: String(val.message ?? ''),
+          updatedAt: Number(val.updatedAt) || 0,
+        });
+      });
+    },
+
+    async startBiometricEnrollOnPhone({
+      userId,
+      userName,
+      target,
+      expectedPassphrase,
+    }) {
+      const enrollRef = deps.ref(deps.db, PATHS.CONTROL.BIOMETRIC_ENROLL);
+      const initialStep: BiometricEnrollStep =
+        target === 'face' ? 'waiting_face' : 'waiting_voice';
+      const initialMessage =
+        target === 'face'
+          ? `Đang chờ ${userName} nhìn vào Camera sau (HD) của điện thoại...`
+          : `Đang chờ ${userName} đọc câu mật khẩu vào mic điện thoại...`;
+
+      await deps.set(enrollRef, {
+        active: true,
+        userId,
+        userName,
+        target,
+        expectedPassphrase: expectedPassphrase.trim().toLowerCase(),
+        step: initialStep,
+        message: initialMessage,
+        updatedAt: deps.now ? deps.now() : Date.now(),
+      });
+    },
+
+    async cancelBiometricEnrollOnPhone() {
+      const enrollRef = deps.ref(deps.db, PATHS.CONTROL.BIOMETRIC_ENROLL);
+      await deps.set(enrollRef, {
+        active: false,
+        userId: '',
+        userName: '',
+        target: 'both',
+        expectedPassphrase: '',
+        step: 'cancelled',
+        message: 'Đã hủy phiên thu mẫu sinh trắc học trên điện thoại.',
+        updatedAt: deps.now ? deps.now() : Date.now(),
+      });
+    },
+
+    async clearUserBiometrics(userId, target) {
+      const rootRef = deps.ref(deps.db);
+      const updates = buildClearBiometricUpdates(userId, target);
+      await deps.update(rootRef, updates);
+      return { status: 'completed' };
+    },
+
     subscribeUsers(cb) {
       const usersRef = deps.ref(deps.db, PATHS.USERS);
       return deps.onValue(usersRef, (snap) => {
@@ -312,6 +418,16 @@ export function createFirebaseService(
               pass: val.pass !== undefined && val.pass !== null ? String(val.pass) : '',
               card: val.card !== undefined && val.card !== null ? String(val.card) : '',
               status: val.status === 'disabled' ? 'disabled' : 'active',
+              hasVoice: Boolean(val.hasVoice),
+              hasFace: Boolean(val.hasFace),
+              voicePassphrase:
+                val.voicePassphrase !== undefined && val.voicePassphrase !== null
+                  ? String(val.voicePassphrase)
+                  : undefined,
+              biometricUpdatedAt:
+                typeof val.biometricUpdatedAt === 'number'
+                  ? val.biometricUpdatedAt
+                  : undefined,
             });
           }
         });
@@ -322,7 +438,8 @@ export function createFirebaseService(
     async addUser(name, pin) {
       const userId = `user_${deps.now ? deps.now() : Date.now()}`;
       const updates = buildAddUserUpdates(userId, name, pin);
-      return executeUserMutation(updates);
+      const res = await executeUserMutation(updates);
+      return { ...res, userId };
     },
 
     async editUserName(userId, newName, pin, card, status) {

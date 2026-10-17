@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SmartLock Sensor Kiosk — Cụm Mic & Camera Sau HD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      background: radial-gradient(circle at 50% 0%, #0f172a 0%, #020617 75%);
+      color: #f8fafc;
+      min-height: 100dvh;
+      overflow-x: hidden;
+      user-select: none;
+    }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .glass-panel {
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.88) 0%, rgba(15, 23, 42, 0.72) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      box-shadow: 0 20px 50px -12px rgba(2, 6, 23, 0.8), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.92); opacity: 0.75; }
+      50% { transform: scale(1.12); opacity: 0.25; }
+      100% { transform: scale(0.92); opacity: 0.75; }
+    }
+    .animate-ring { animation: pulse-ring 2.6s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    @keyframes scan-line {
+      0% { top: 8%; opacity: 0.3; }
+      50% { top: 88%; opacity: 0.95; }
+      100% { top: 8%; opacity: 0.3; }
+    }
+    .scan-laser {
+      position: absolute;
+      left: 6%;
+      right: 6%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #38bdf8, #818cf8, #38bdf8, transparent);
+      box-shadow: 0 0 14px #38bdf8;
+      animation: scan-line 2.4s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="flex flex-col justify-between p-4 sm:p-6">
+  <!-- Top Status Bar (Isolated Peripheral Mode — No Admin Access) -->
+  <header class="glass-panel rounded-2xl px-4 py-3 flex items-center justify-between gap-2">
+    <div class="flex items-center gap-2.5">
+      <div class="h-9 w-9 rounded-xl bg-blue-600/20 border border-blue-400/30 flex items-center justify-center text-blue-400 font-extrabold text-sm">
+        SL
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xs sm:text-sm font-extrabold tracking-tight text-white">TRẠM CẢM BIẾN CỬA (KIOSK)</h1>
+          <span id="mode-pill" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+            HANDS-FREE
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400">Chế độ ngoại vi cô lập • Không có quyền truy cập Web Admin</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button
+        id="btn-switch-cam"
+        type="button"
+        class="px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-bold bg-slate-800/90 hover:bg-slate-700 text-sky-300 border border-sky-500/30 transition"
+        title="Đổi camera (Mặc định: Cam sau HD)"
+      >
+        📷 CAM SAU (HD)
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Interactive Sensor Stage -->
+  <main class="my-auto py-4 flex flex-col items-center justify-center w-full max-w-md mx-auto">
+    <!-- Initial One-Time Hardware Wake Panel -->
+    <div id="init-overlay" class="glass-panel rounded-3xl p-6 text-center w-full space-y-4">
+      <div class="mx-auto h-20 w-20 rounded-full bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-4xl shadow-lg shadow-blue-500/20">
+        🎙️
+      </div>
+      <h2 class="text-lg font-extrabold text-white">Kích Hoạt Cụm Mic &amp; Camera Sau HD</h2>
+      <p class="text-xs text-slate-300 leading-relaxed">
+        Chạm <strong>1 lần duy nhất</strong> để khởi tạo Microphone (VAD tự động thu giọng nói &amp; xử lý Transcript) và <strong>Camera sau độ phân giải cao (Full HD)</strong>.
+      </p>
+
+      <!-- Cảnh báo tự động nếu đang mở qua HTTP thường (không phải HTTPS) trên điện thoại -->
+      <div id="https-warning-box" class="hidden rounded-2xl bg-amber-500/15 border border-amber-400/40 p-3.5 text-left space-y-2.5">
+        <div class="flex items-center gap-2 text-amber-300 font-extrabold text-xs">
+          <span>⚠️ TRÌNH DUYỆT ĐIỆN THOẠI YÊU CẦU HTTPS</span>
+        </div>
+        <p class="text-[11px] text-amber-100/90 leading-relaxed">
+          Bạn đang mở qua <code>http://</code> thường nên Chrome/Safari trên điện thoại tự động khóa API Camera &amp; Mic (kể cả khi bạn đã cấp quyền trong Cài đặt). Hãy bấm nút dưới đây để chuyển sang cổng <strong>HTTPS (8443)</strong>:
+        </p>
+        <a
+          id="btn-goto-https"
+          href="#"
+          class="block w-full text-center py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-lg transition"
+        >
+          🔒 CHUYỂN SANG HTTPS (MỞ KHÓA CAM &amp; MIC)
+        </a>
+        <p class="text-[10px] text-amber-200/80 leading-relaxed">
+          *Lưu ý: Khi chuyển sang HTTPS lần đầu, nếu trình duyệt báo chứng chỉ tự ký, hãy bấm <strong>"Nâng cao (Advanced)" &rarr; "Tiếp tục truy cập (Proceed)"</strong>.
+        </p>
+      </div>
+
+      <!-- Khung hiển thị lỗi chi tiết nếu có -->
+      <div id="error-detail-box" class="hidden rounded-2xl bg-rose-500/15 border border-rose-400/40 p-3 text-left text-xs text-rose-200 space-y-1">
+        <div class="font-extrabold text-rose-300">Chi tiết trạng thái thiết bị:</div>
+        <div id="error-detail-text" class="font-mono text-[11px] break-words"></div>
+      </div>
+
+      <button
+        id="btn-start-kiosk"
+        type="button"
+        class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-sm shadow-xl shadow-blue-600/30 active:scale-[0.99] transition"
+      >
+        BẮT ĐẦU CHẾ ĐỘ TỰ ĐỘNG (HANDS-FREE)
+      </button>
+    </div>
+
+    <!-- Active Kiosk Panel -->
+    <div id="kiosk-stage" class="hidden glass-panel rounded-3xl p-5 sm:p-6 w-full text-center space-y-4 relative overflow-hidden">
+      <!-- Enrollment Banner (Shown automatically when Admin clicks Add/Update Voice or Face on Web Admin) -->
+      <div id="enroll-banner" class="hidden rounded-2xl bg-amber-500/15 border border-amber-400/40 px-3.5 py-2.5 text-left">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-300">
+            ⚡ LỆNH THU MẪU TỪ WEB ADMIN
+          </span>
+          <span id="enroll-target-badge" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/25 text-amber-200">
+            VOICE + FACE
+          </span>
+        </div>
+        <p class="text-xs font-bold text-white mt-1">
+          Thành viên: <span id="enroll-user-name" class="text-amber-300 font-extrabold">—</span>
+        </p>
+        <p id="enroll-passphrase-hint" class="text-[11px] text-amber-200/90 mt-0.5">
+          Hãy nói một câu mật khẩu bất kỳ (tối thiểu 2 từ) vào mic — Hệ thống sẽ tự nhận diện Transcript và lưu làm mật khẩu giọng nói.
+        </p>
+      </div>
+
+      <!-- Step Indicator Pills -->
+      <div class="grid grid-cols-2 gap-2 text-xs font-bold">
+        <div id="step-pill-voice" class="rounded-xl py-2 px-3 border border-blue-400/50 bg-blue-500/20 text-blue-200 flex items-center justify-center gap-1.5">
+          <span>1. Giọng nói + Transcript</span>
+        </div>
+        <div id="step-pill-face" class="rounded-xl py-2 px-3 border border-slate-700 bg-slate-800/60 text-slate-400 flex items-center justify-center gap-1.5">
+          <span>2. Khuôn mặt (Cam sau HD)</span>
+        </div>
+      </div>
+
+      <!-- Stage Visual: Voice VAD Orb -->
+      <div id="voice-visual" class="py-5 flex flex-col items-center justify-center">
+        <div class="relative h-36 w-36 flex items-center justify-center">
+          <div id="vad-outer-ring" class="absolute inset-0 rounded-full bg-blue-500/20 border-2 border-blue-400/40 animate-ring"></div>
+          <div id="vad-core" class="relative z-10 h-24 w-24 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-500 to-sky-400 flex flex-col items-center justify-center shadow-xl shadow-blue-500/30 transition-transform duration-75">
+            <span id="vad-icon" class="text-3xl">🎙️</span>
+            <span id="vad-state-label" class="text-[10px] font-extrabold uppercase tracking-wider text-white/95 mt-1">LẮNG NGHE</span>
+          </div>
+        </div>
+
+        <!-- Live Audio Energy Meter -->
+        <div class="w-56 h-2 bg-slate-800 rounded-full overflow-hidden mt-4 border border-slate-700/60">
+          <div id="vad-meter" class="h-full bg-gradient-to-r from-sky-400 via-blue-500 to-emerald-400 transition-all duration-75" style="width: 4%"></div>
+        </div>
+        <p class="text-[11px] font-mono text-slate-400 mt-1.5">
+          Tự động thu âm &amp; xử lý Transcript khi bạn nói câu mật khẩu
+        </p>
+      </div>
+
+      <!-- Stage Visual: High-Resolution Rear Camera Face Scanner with Biometric Face Model Guide & Live 5-Algorithm HUD -->
+      <div id="camera-visual" class="hidden flex-col items-center justify-center space-y-2.5 w-full">
+        <div id="camera-frame-box" class="relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-sky-400/70 bg-black shadow-xl shadow-sky-500/20 transition-colors duration-300">
+          <video
+            id="kiosk-video"
+            autoplay
+            playsinline
+            muted
+            class="w-full h-full object-cover"
+          ></video>
+
+          <!-- Biometric Face Silhouette Guide Overlay (Mô hình định vị khuôn mặt chuẩn) -->
+          <svg
+            id="face-guide-svg"
+            viewBox="0 0 200 150"
+            preserveAspectRatio="xMidYMid slice"
+            class="pointer-events-none absolute inset-0 w-full h-full"
+          >
+            <defs>
+              <mask id="face-oval-cutout">
+                <rect x="0" y="0" width="200" height="150" fill="white" />
+                <ellipse cx="100" cy="70" rx="44" ry="52" fill="black" />
+              </mask>
+            </defs>
+            <!-- Lớp phủ tối xung quanh để làm nổi bật khung mô hình khuôn mặt ở giữa -->
+            <rect
+              x="0"
+              y="0"
+              width="200"
+              height="150"
+              fill="rgba(2, 6, 23, 0.52)"
+              mask="url(#face-oval-cutout)"
+            />
+
+            <!-- 4 Góc định vị khung quét -->
+            <g id="face-guide-brackets" stroke="#38bdf8" stroke-width="2.2" fill="none" stroke-linecap="round">
+              <path d="M44 22 L44 12 L56 12" />
+              <path d="M156 22 L156 12 L144 12" />
+              <path d="M44 122 L44 132 L56 132" />
+              <path d="M156 122 L156 132 L144 132" />
+            </g>
+
+            <!-- Đường viền Mô hình Khuôn mặt + Tai + Vai -->
+            <g id="face-guide-contour" stroke="#38bdf8" stroke-width="2" fill="none">
+              <ellipse
+                cx="100"
+                cy="70"
+                rx="44"
+                ry="52"
+                stroke-dasharray="5 3"
+              />
+              <!-- Tai trái & Tai phải -->
+              <path d="M56 60 C50 60, 50 78, 56 78" stroke-width="1.6" opacity="0.8" />
+              <path d="M144 60 C150 60, 150 78, 144 78" stroke-width="1.6" opacity="0.8" />
+              <!-- Đường trục ngang 2 mắt & sống mũi định tâm -->
+              <line x1="68" y1="62" x2="132" y2="62" stroke-width="1" stroke-dasharray="2 3" opacity="0.65" />
+              <circle cx="83" cy="62" r="2.2" opacity="0.7" />
+              <circle cx="117" cy="62" r="2.2" opacity="0.7" />
+              <line x1="100" y1="54" x2="100" y2="82" stroke-width="1" stroke-dasharray="2 3" opacity="0.65" />
+              <path d="M90 95 Q100 101 110 95" stroke-width="1.3" opacity="0.65" />
+              <!-- Đường cong vai gợi ý khoảng cách -->
+              <path d="M42 146 C56 131, 76 126, 100 126 C124 126, 144 131, 158 146" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.55" />
+            </g>
+          </svg>
+
+          <!-- Canvas hiển thị trực tiếp Bounding Box & 5 Điểm mốc giải phẫu (Mắt-Mũi-Miệng) từ YuNet AI -->
+          <canvas
+            id="face-landmark-canvas"
+            class="pointer-events-none absolute inset-0 w-full h-full"
+          ></canvas>
+
+          <!-- Hiệu ứng nháy Flash trắng khi Tự động Chụp thành công -->
+          <div
+            id="cam-shutter-flash"
+            class="pointer-events-none absolute inset-0 bg-white opacity-0 transition-opacity duration-200"
+          ></div>
+
+          <div class="scan-laser"></div>
+
+          <!-- Top Badge: Trạng thái khớp khung mô hình & Đếm ngược 10s -->
+          <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 pointer-events-none">
+            <span
+              id="face-align-badge"
+              class="px-2.5 py-1 rounded-lg bg-slate-950/85 border border-sky-400/50 text-[10px] font-extrabold text-sky-300 backdrop-blur-sm truncate"
+            >
+              🎯 ĐẶT MẶT VÀO KHUNG MÔ HÌNH
+            </span>
+            <span
+              id="face-prep-timer"
+              class="hidden px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0"
+            >
+              ⏳ 10s
+            </span>
+          </div>
+
+          <div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-sm text-[10px] font-mono text-sky-300">
+            <span id="cam-res-label">CAM SAU HD • YUNET 5-LANDMARK AI</span>
+            <span id="cam-countdown">30s</span>
+          </div>
+        </div>
+
+        <!-- BẢNG HUD TRỰC QUAN 5 THUẬT TOÁN KIỂM TRA KHUÔN MẶT ĐẠT CHUẨN (HIỂN THỊ TRỰC TIẾP KHI GHI HÌNH) -->
+        <div
+          id="face-algo-panel"
+          class="w-full rounded-2xl bg-slate-950/85 border border-slate-800 px-3 py-2.5 text-left space-y-1.5"
+        >
+          <div class="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+            <span class="text-[10px] font-extrabold uppercase tracking-wider text-sky-400">
+              🧬 5 THUẬT TOÁN KIỂM TRA KHUÔN MẶT CHUẨN
+            </span>
+            <span
+              id="face-algo-score-badge"
+              class="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded bg-slate-800 text-slate-300"
+            >
+              ĐANG QUÉT 0/5
+            </span>
+          </div>
+          <div id="face-algo-list" class="space-y-1 text-[11px] font-mono">
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 1. Phát hiện mặt (YuNet DNN)</span>
+              <span class="text-slate-500">Đang khởi tạo...</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 2. Căn tâm khung mô hình</span>
+              <span class="text-slate-500">Chờ khung hình...</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 3. Khoảng cách &amp; Kích thước</span>
+              <span class="text-slate-500">Chờ khung hình...</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 4. Tư thế nhìn thẳng (5 điểm mốc)</span>
+              <span class="text-slate-500">Chờ khung hình...</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-400">
+              <span>⏳ 5. Độ sáng &amp; Độ nét (Laplacian)</span>
+              <span class="text-slate-500">Chờ khung hình...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nút chụp nhanh khi đã khớp chuẩn 5/5 thuật toán (không cần đợi hết 10s nếu người dùng đã căn chuẩn) -->
+        <button
+          id="btn-force-snap-face"
+          type="button"
+          class="hidden w-full py-2.5 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 active:scale-95"
+        >
+          <span>📸 CHỤP NGAY (ĐÃ ĐẠT 5/5 CHUẨN)</span>
+        </button>
+
+        <canvas id="capture-canvas" class="hidden"></canvas>
+      </div>
+
+      <!-- Dynamic Status Title & Message -->
+      <div class="pt-1 space-y-1">
+        <h3 id="status-title" class="text-base sm:text-lg font-extrabold text-white">
+          Đang lắng nghe câu mật khẩu...
+        </h3>
+        <p id="status-desc" class="text-xs text-slate-300 leading-relaxed">
+          Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.
+        </p>
+      </div>
+
+      <!-- Score / Transcript Telemetry Box -->
+      <div id="telemetry-box" class="rounded-2xl bg-slate-900/80 border border-slate-800 px-3.5 py-2.5 text-left text-[11px] font-mono space-y-1">
+        <div class="flex justify-between text-slate-400">
+          <span>Trạng thái cảm biến:</span>
+          <span id="tele-mode" class="text-emerald-400 font-bold">TRỰC MỞ KHÓA TỰ ĐỘNG</span>
+        </div>
+        <div class="flex justify-between text-slate-400">
+          <span>Transcript vừa nhận diện:</span>
+          <span id="tele-transcript" class="text-sky-300 font-bold truncate max-w-[195px]">—</span>
+        </div>
+        <div class="flex justify-between text-slate-400">
+          <span>Điểm SpeechBrain / FaceNet:</span>
+          <span id="tele-scores" class="text-indigo-300">Voice: — | Face: —</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer Info -->
+  <footer class="text-center text-[11px] text-slate-500 font-mono">
+    SpeechBrain (192-D) • Auto Transcript ASR • FaceNet (512-D Rear Cam HD)
+  </footer>
+
+  <script>
+    const API_BASE = window.location.origin;
+    const httpsTargetUrl = `https://${window.location.hostname}:8443/kiosk`;
+
+    // DOM Elements
+    const initOverlay = document.getElementById('init-overlay');
+    const kioskStage = document.getElementById('kiosk-stage');
+    const btnStartKiosk = document.getElementById('btn-start-kiosk');
+    const btnSwitchCam = document.getElementById('btn-switch-cam');
+    const httpsWarningBox = document.getElementById('https-warning-box');
+    const btnGotoHttps = document.getElementById('btn-goto-https');
+    const errorDetailBox = document.getElementById('error-detail-box');
+    const errorDetailText = document.getElementById('error-detail-text');
+    const enrollBanner = document.getElementById('enroll-banner');
+    const enrollTargetBadge = document.getElementById('enroll-target-badge');
+    const enrollUserName = document.getElementById('enroll-user-name');
+    const enrollPassphraseHint = document.getElementById('enroll-passphrase-hint');
+    const stepPillVoice = document.getElementById('step-pill-voice');
+    const stepPillFace = document.getElementById('step-pill-face');
+    const voiceVisual = document.getElementById('voice-visual');
+    const cameraVisual = document.getElementById('camera-visual');
+    const cameraFrameBox = document.getElementById('camera-frame-box');
+    const faceGuideBrackets = document.getElementById('face-guide-brackets');
+    const faceGuideContour = document.getElementById('face-guide-contour');
+    const faceAlignBadge = document.getElementById('face-align-badge');
+    const facePrepTimer = document.getElementById('face-prep-timer');
+    const faceLandmarkCanvas = document.getElementById('face-landmark-canvas');
+    const camShutterFlash = document.getElementById('cam-shutter-flash');
+    const faceAlgoScoreBadge = document.getElementById('face-algo-score-badge');
+    const faceAlgoList = document.getElementById('face-algo-list');
+    const btnForceSnapFace = document.getElementById('btn-force-snap-face');
+    const vadCore = document.getElementById('vad-core');
+    const vadIcon = document.getElementById('vad-icon');
+    const vadStateLabel = document.getElementById('vad-state-label');
+    const vadMeter = document.getElementById('vad-meter');
+    const videoEl = document.getElementById('kiosk-video');
+    const canvasEl = document.getElementById('capture-canvas');
+    const camResLabel = document.getElementById('cam-res-label');
+    const camCountdown = document.getElementById('cam-countdown');
+    const statusTitle = document.getElementById('status-title');
+    const statusDesc = document.getElementById('status-desc');
+    const teleMode = document.getElementById('tele-mode');
+    const teleTranscript = document.getElementById('tele-transcript');
+    const teleScores = document.getElementById('tele-scores');
+
+    btnGotoHttps.href = httpsTargetUrl;
+    const isInsecureLan =
+      window.location.protocol === 'http:' &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1';
+
+    if (isInsecureLan && (!window.isSecureContext || !navigator.mediaDevices)) {
+      httpsWarningBox.classList.remove('hidden');
+    }
+
+    // Ưu tiên Camera sau ('environment') độ phân giải Full HD
+    let preferredFacingMode = 'environment';
+    let videoStream = null;
+    let micStream = null;
+    let audioCtx = null;
+    let scriptProcessor = null;
+    let kioskStarted = false;
+
+    let currentServerMode = 'verify';
+    let enrollInfo = {
+      active: false,
+      userId: '',
+      userName: '',
+      target: 'both',
+      expectedPassphrase: '',
+      step: 'idle',
+      message: '',
+    };
+
+    let activeSessionToken = null;
+    let activeSessionUser = '';
+    let sessionExpiresAt = 0;
+    let isBusyUploading = false;
+    let isPollingState = false;
+    let isTtsSpeaking = false;
+    let lastFaceScanAt = 0;
+
+    // Độ trễ 10 giây khi thêm/cập nhật khuôn mặt để người dùng kịp đặt mặt vào khung mô hình
+    const FACE_ENROLL_PREP_MS = 10000;
+    let faceEnrollPrepStartAt = 0;
+
+    // Tham số VAD chống nhiễu nền & chống tự kích hoạt khi im lặng
+    const TARGET_SAMPLE_RATE = 16000;
+    let preRollBuffer = [];
+    let recordingChunks = [];
+    let isSpeaking = false;
+    let speechStartTime = 0;
+    let lastVoiceActiveTime = 0;
+    let voicedFrameCount = 0;
+    let peakRmsInSegment = 0;
+    let noiseFloor = 0.015;
+    let cooldownUntil = 0;
+
+    function resetVadBuffer() {
+      isSpeaking = false;
+      recordingChunks = [];
+      preRollBuffer = [];
+      voicedFrameCount = 0;
+      peakRmsInSegment = 0;
+    }
+
+    function showErrorDetail(msg) {
+      errorDetailBox.classList.remove('hidden');
+      errorDetailText.textContent = msg;
+    }
+
+    function speakPrompt(text) {
+      try {
+        if (!('speechSynthesis' in window)) return;
+        // Tạm ngắt thu âm VAD trong lúc loa điện thoại đang phát hướng dẫn để mic không thu lại tiếng loa
+        isTtsSpeaking = true;
+        resetVadBuffer();
+        cooldownUntil = Date.now() + 2600;
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'vi-VN';
+        utter.rate = 1.05;
+        utter.onend = () => {
+          isTtsSpeaking = false;
+          resetVadBuffer();
+          cooldownUntil = Date.now() + 700;
+        };
+        utter.onerror = () => {
+          isTtsSpeaking = false;
+          resetVadBuffer();
+          cooldownUntil = Date.now() + 500;
+        };
+        window.speechSynthesis.speak(utter);
+      } catch (_) {
+        isTtsSpeaking = false;
+      }
+    }
+
+    function downsampleTo16kHz(float32Array, inputSampleRate) {
+      if (inputSampleRate === TARGET_SAMPLE_RATE) return float32Array;
+      const ratio = inputSampleRate / TARGET_SAMPLE_RATE;
+      const newLength = Math.round(float32Array.length / ratio);
+      const result = new Float32Array(newLength);
+      for (let i = 0; i < newLength; i++) {
+        const idx = Math.min(Math.floor(i * ratio), float32Array.length - 1);
+        result[i] = float32Array[idx];
+      }
+      return result;
+    }
+
+    function encodeWav16kHz(chunks) {
+      let totalLen = 0;
+      for (const c of chunks) totalLen += c.length;
+      const samples = new Float32Array(totalLen);
+      let offset = 0;
+      for (const c of chunks) {
+        samples.set(c, offset);
+        offset += c.length;
+      }
+
+      const buffer = new ArrayBuffer(44 + samples.length * 2);
+      const view = new DataView(buffer);
+      const writeStr = (pos, str) => {
+        for (let i = 0; i < str.length; i++) view.setUint8(pos + i, str.charCodeAt(i));
+      };
+      writeStr(0, 'RIFF');
+      view.setUint32(4, 36 + samples.length * 2, true);
+      writeStr(8, 'WAVE');
+      writeStr(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, TARGET_SAMPLE_RATE, true);
+      view.setUint32(28, TARGET_SAMPLE_RATE * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeStr(36, 'data');
+      view.setUint32(40, samples.length * 2, true);
+
+      let idx = 44;
+      for (let i = 0; i < samples.length; i++, idx += 2) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(idx, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      }
+      return new Blob([buffer], { type: 'audio/wav' });
+    }
+
+    async function getMediaStreamWithFallback(constraintsList) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const legacyGetUserMedia =
+          navigator.getUserMedia ||
+          navigator.webkitGetUserMedia ||
+          navigator.mozGetUserMedia;
+        if (!legacyGetUserMedia) {
+          throw new Error(
+            'HTTPS_REQUIRED: Trình duyệt chặn mediaDevices trên giao thức HTTP thường. Hãy chuyển sang HTTPS cổng 8443.'
+          );
+        }
+        return new Promise((resolve, reject) => {
+          legacyGetUserMedia.call(navigator, constraintsList[0], resolve, reject);
+        });
+      }
+
+      let lastErr = null;
+      for (const c of constraintsList) {
+        try {
+          return await navigator.mediaDevices.getUserMedia(c);
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error('Không thể mở thiết bị phần cứng.');
+    }
+
+    async function ensureRearCameraHDActive() {
+      if (videoStream && videoStream.active) {
+        return;
+      }
+      const camStream = await getMediaStreamWithFallback([
+        {
+          video: {
+            facingMode: { exact: preferredFacingMode },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        },
+        {
+          video: {
+            facingMode: { ideal: preferredFacingMode },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        },
+        {
+          video: { facingMode: preferredFacingMode },
+          audio: false,
+        },
+        {
+          video: true,
+          audio: false,
+        },
+      ]);
+
+      videoStream = camStream;
+      videoEl.srcObject = camStream;
+      videoEl.style.transform =
+        preferredFacingMode === 'environment' ? 'scaleX(1)' : 'scaleX(-1)';
+      videoEl.onloadedmetadata = () => {
+        videoEl.play().catch(() => {});
+        const w = videoEl.videoWidth || 1280;
+        const h = videoEl.videoHeight || 720;
+        const camName =
+          preferredFacingMode === 'environment' ? 'CAM SAU HD' : 'CAM TRƯỚC';
+        camResLabel.textContent = `${camName} • ${w}x${h}`;
+      };
+    }
+
+    function stopCameraStream() {
+      if (videoStream) {
+        videoStream.getTracks().forEach((t) => t.stop());
+        videoStream = null;
+        videoEl.srcObject = null;
+      }
+    }
+
+    btnSwitchCam.addEventListener('click', async () => {
+      preferredFacingMode =
+        preferredFacingMode === 'environment' ? 'user' : 'environment';
+      btnSwitchCam.textContent =
+        preferredFacingMode === 'environment'
+          ? '📷 CAM SAU (HD)'
+          : '📷 CAM TRƯỚC';
+      if (kioskStarted && !cameraVisual.classList.contains('hidden')) {
+        stopCameraStream();
+        await ensureRearCameraHDActive();
+      }
+    });
+
+    function triggerShutterFlash() {
+      if (!camShutterFlash) return;
+      camShutterFlash.style.opacity = '0.9';
+      setTimeout(() => {
+        camShutterFlash.style.opacity = '0';
+      }, 220);
+    }
+
+    function clearLandmarkCanvas() {
+      if (!faceLandmarkCanvas) return;
+      const ctx = faceLandmarkCanvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, faceLandmarkCanvas.width, faceLandmarkCanvas.height);
+      }
+    }
+
+    function renderFaceAlgorithmHud(data) {
+      if (!data) return;
+      const checks = Array.isArray(data.checks)
+        ? data.checks
+        : (data.meta && Array.isArray(data.meta.checks) ? data.meta.checks : []);
+      const isAligned = Boolean(data.aligned || (data.meta && data.meta.aligned));
+
+      if (faceAlgoList && checks.length > 0) {
+        let passedCount = 0;
+        const rowsHtml = checks
+          .map((chk) => {
+            const ok = Boolean(chk.passed);
+            if (ok) passedCount += 1;
+            const icon = ok ? '✅' : '⚠️';
+            const nameCls = ok
+              ? 'text-emerald-300 font-bold'
+              : 'text-amber-300 font-semibold';
+            const valCls = ok
+              ? 'text-emerald-400 font-extrabold'
+              : 'text-amber-400 font-bold';
+            return `<div class="flex items-center justify-between gap-2 py-0.5">
+              <span class="${nameCls} truncate">${icon} ${chk.name}</span>
+              <span class="${valCls} shrink-0">${chk.value || ''}</span>
+            </div>`;
+          })
+          .join('');
+        faceAlgoList.innerHTML = rowsHtml;
+
+        if (faceAlgoScoreBadge) {
+          faceAlgoScoreBadge.textContent = `ĐẠT ${passedCount}/${checks.length} THUẬT TOÁN`;
+          faceAlgoScoreBadge.className =
+            passedCount === checks.length
+              ? 'text-[10px] font-mono font-extrabold px-2 py-0.5 rounded bg-emerald-500 text-slate-950 shadow'
+              : 'text-[10px] font-mono font-extrabold px-2 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-400/40';
+        }
+      }
+
+      // Vẽ trực tiếp Khung Bounding Box & 5 Điểm mốc giải phẫu (Mắt phải, Mắt trái, Mũi, 2 Khóe miệng) lên màn hình Camera
+      if (!faceLandmarkCanvas || !cameraFrameBox) return;
+      const rect = cameraFrameBox.getBoundingClientRect();
+      const cw = Math.max(1, Math.round(rect.width));
+      const ch = Math.max(1, Math.round(rect.height));
+      if (faceLandmarkCanvas.width !== cw || faceLandmarkCanvas.height !== ch) {
+        faceLandmarkCanvas.width = cw;
+        faceLandmarkCanvas.height = ch;
+      }
+      const ctx = faceLandmarkCanvas.getContext('2d');
+      ctx.clearRect(0, 0, cw, ch);
+
+      const bbox = (Array.isArray(data.bbox) && data.bbox.length === 4)
+        ? data.bbox
+        : (data.meta && Array.isArray(data.meta.bbox) && data.meta.bbox.length === 4 ? data.meta.bbox : null);
+      const landmarks = Array.isArray(data.landmarks)
+        ? data.landmarks
+        : (data.meta && Array.isArray(data.meta.landmarks) ? data.meta.landmarks : []);
+      const strokeColor = isAligned ? '#10b981' : '#f59e0b';
+
+      if (bbox) {
+        const bx = bbox[0] * cw;
+        const by = bbox[1] * ch;
+        const bw = bbox[2] * cw;
+        const bh = bbox[3] * ch;
+
+        ctx.save();
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2.2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(bx, by, bw, bh);
+
+        // Nhãn AI trên góc khung mặt
+        ctx.setLineDash([]);
+        ctx.fillStyle = isAligned
+          ? 'rgba(6, 78, 59, 0.88)'
+          : 'rgba(120, 53, 15, 0.88)';
+        const tagText = isAligned
+          ? '✓ YUNET AI: ĐẠT CHUẨN 5/5'
+          : '⚡ YUNET AI: ĐANG CĂN CHỈNH';
+        ctx.font = 'bold 10px JetBrains Mono, monospace';
+        const tw = ctx.measureText(tagText).width + 10;
+        const ty = Math.max(28, by - 6);
+        ctx.fillRect(bx, ty - 14, tw, 16);
+        ctx.fillStyle = isAligned ? '#6ee7b7' : '#fde68a';
+        ctx.fillText(tagText, bx + 5, ty - 3);
+        ctx.restore();
+      }
+
+      if (landmarks.length >= 5) {
+        const pts = landmarks.map((pt) => [pt[0] * cw, pt[1] * ch]);
+        const [re, le, nt, rm, lm] = pts;
+
+        ctx.save();
+        // Vẽ trục cân bằng 2 mắt - mũi - miệng
+        ctx.strokeStyle = isAligned
+          ? 'rgba(16, 185, 129, 0.85)'
+          : 'rgba(56, 189, 248, 0.85)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        // Trục ngang 2 mắt
+        ctx.moveTo(re[0], re[1]);
+        ctx.lineTo(le[0], le[1]);
+        // Trục dọc từ tâm 2 mắt xuống chóp mũi
+        const midEyeX = 0.5 * (re[0] + le[0]);
+        const midEyeY = 0.5 * (re[1] + le[1]);
+        ctx.moveTo(midEyeX, midEyeY);
+        ctx.lineTo(nt[0], nt[1]);
+        // Đường miệng
+        ctx.moveTo(rm[0], rm[1]);
+        ctx.lineTo(lm[0], lm[1]);
+        ctx.stroke();
+
+        // Vẽ 5 điểm mốc sinh trắc học (Mắt, Mũi, Miệng)
+        pts.forEach(([px, py], idx) => {
+          ctx.beginPath();
+          ctx.arc(px, py, idx === 2 ? 4.2 : 3.4, 0, Math.PI * 2);
+          ctx.fillStyle = isAligned ? '#34d399' : '#38bdf8';
+          ctx.fill();
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = '#020617';
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+    }
+
+    function updateFaceGuideVisual(mode, customBadgeText) {
+      if (!faceGuideBrackets || !faceGuideContour || !faceAlignBadge || !cameraFrameBox) return;
+      if (mode === 'aligned') {
+        faceGuideBrackets.setAttribute('stroke', '#10b981');
+        faceGuideContour.setAttribute('stroke', '#10b981');
+        cameraFrameBox.className =
+          'relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-emerald-400 bg-black shadow-xl shadow-emerald-500/25 transition-colors duration-300';
+        faceAlignBadge.className =
+          'px-2.5 py-1 rounded-lg bg-emerald-950/90 border border-emerald-400/70 text-[10px] font-extrabold text-emerald-300 backdrop-blur-sm truncate';
+        faceAlignBadge.textContent =
+          customBadgeText || '✅ ĐÃ KHỚP KHUNG MÔ HÌNH CHUẨN';
+      } else if (mode === 'warning') {
+        faceGuideBrackets.setAttribute('stroke', '#f59e0b');
+        faceGuideContour.setAttribute('stroke', '#f59e0b');
+        cameraFrameBox.className =
+          'relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-amber-400/80 bg-black shadow-xl shadow-amber-500/20 transition-colors duration-300';
+        faceAlignBadge.className =
+          'px-2.5 py-1 rounded-lg bg-amber-950/90 border border-amber-400/60 text-[10px] font-extrabold text-amber-300 backdrop-blur-sm truncate';
+        faceAlignBadge.textContent =
+          customBadgeText || '⚠️ ĐẶT MẶT VÀO GIỮA KHUNG BẦU DỤC';
+      } else {
+        faceGuideBrackets.setAttribute('stroke', '#38bdf8');
+        faceGuideContour.setAttribute('stroke', '#38bdf8');
+        cameraFrameBox.className =
+          'relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-sky-400/70 bg-black shadow-xl shadow-sky-500/20 transition-colors duration-300';
+        faceAlignBadge.className =
+          'px-2.5 py-1 rounded-lg bg-slate-950/85 border border-sky-400/50 text-[10px] font-extrabold text-sky-300 backdrop-blur-sm truncate';
+        faceAlignBadge.textContent =
+          customBadgeText || '🎯 ĐẶT MẶT VÀO KHUNG MÔ HÌNH';
+      }
+    }
+
+    function updateEnrollPrepTimerBadge() {
+      if (
+        !kioskStarted ||
+        currentServerMode !== 'enroll' ||
+        !enrollInfo.active ||
+        enrollInfo.step !== 'waiting_face'
+      ) {
+        facePrepTimer.classList.add('hidden');
+        return;
+      }
+      facePrepTimer.classList.remove('hidden');
+      const elapsed = Date.now() - faceEnrollPrepStartAt;
+      const remSec = Math.max(0, Math.ceil((FACE_ENROLL_PREP_MS - elapsed) / 1000));
+      if (remSec > 0) {
+        facePrepTimer.className =
+          'px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
+        facePrepTimer.textContent = `⏳ CĂN CHỈNH: ${remSec}s`;
+        camCountdown.textContent = `CHỤP SAU ${remSec}s`;
+      } else {
+        facePrepTimer.className =
+          'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
+        facePrepTimer.textContent = '📸 TỰ ĐỘNG CHỤP';
+        camCountdown.textContent = 'AUTO CAPTURE';
+      }
+    }
+
+    async function setVisualPhase(phase) {
+      resetVadBuffer();
+      if (phase === 'voice') {
+        clearLandmarkCanvas();
+        if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
+        voiceVisual.classList.remove('hidden');
+        cameraVisual.classList.add('hidden');
+        cameraVisual.classList.remove('flex');
+        facePrepTimer.classList.add('hidden');
+        stepPillVoice.className =
+          'rounded-xl py-2 px-3 border border-blue-400/50 bg-blue-500/20 text-blue-200 flex items-center justify-center gap-1.5';
+        stepPillFace.className =
+          'rounded-xl py-2 px-3 border border-slate-700 bg-slate-800/60 text-slate-400 flex items-center justify-center gap-1.5';
+      } else {
+        voiceVisual.classList.add('hidden');
+        cameraVisual.classList.remove('hidden');
+        cameraVisual.classList.add('flex');
+        updateFaceGuideVisual('scanning');
+        stepPillVoice.className =
+          'rounded-xl py-2 px-3 border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 flex items-center justify-center gap-1.5';
+        stepPillFace.className =
+          'rounded-xl py-2 px-3 border border-sky-400/60 bg-sky-500/20 text-sky-200 flex items-center justify-center gap-1.5';
+        try {
+          await ensureRearCameraHDActive();
+        } catch (err) {
+          statusDesc.textContent =
+            'Không thể mở Camera sau: ' + (err && err.message ? err.message : err);
+        }
+      }
+    }
+
+    if (btnForceSnapFace) {
+      btnForceSnapFace.addEventListener('click', async () => {
+        btnForceSnapFace.classList.add('hidden');
+        faceEnrollPrepStartAt = 0;
+        await processFaceStep();
+      });
+    }
+
+    /**
+     * Luồng xử lý 2 giai đoạn cho âm thanh vừa thu:
+     * Bước 1: Gửi tới `/api/biometrics/transcribe` để xử lý Transcript tiếng Việt trước.
+     *         Nếu không có tiếng nói thực sự hoặc không nhận diện được chữ -> Dừng ngay, không xác thực nhầm!
+     * Bước 2: Gửi `audio` + `transcript` vừa nhận diện lên `/enroll-voice` (tự động lưu làm mật khẩu giọng nói)
+     *         hoặc `/verify-voice` (đối chiếu với câu mật khẩu & giọng nói đã lưu).
+     */
+    async function handleCapturedVoiceBlob(wavBlob) {
+      if (isBusyUploading) return;
+      isBusyUploading = true;
+      vadStateLabel.textContent = 'XỬ LÝ CHỮ...';
+      vadIcon.textContent = '⏳';
+
+      try {
+        // BƯỚC A: Xử lý Transcript trước
+        const transForm = new FormData();
+        transForm.append('audio', wavBlob, 'voice_16k.wav');
+
+        const transResp = await fetch(`${API_BASE}/api/biometrics/transcribe`, {
+          method: 'POST',
+          body: transForm,
+        });
+        const transData = await transResp.json();
+        const recognizedTranscript = (transData.transcript || '').trim();
+
+        // Nếu không phát hiện câu nói tiếng Việt thực sự -> Tuyệt đối không gửi xác thực hoặc tự nhận câu lệnh!
+        if (!transResp.ok || !transData.hasSpeech || !recognizedTranscript) {
+          if (
+            currentServerMode === 'enroll' &&
+            enrollInfo.active &&
+            enrollInfo.step === 'waiting_voice'
+          ) {
+            teleTranscript.textContent = '(chưa rõ chữ)';
+            statusTitle.textContent = `Đang chờ ${enrollInfo.userName} nói câu mật khẩu...`;
+            statusDesc.textContent =
+              transData.detail ||
+              'Hãy nói rõ một câu mật khẩu bất kỳ (tối thiểu 2 từ) vào mic điện thoại.';
+          } else {
+            statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
+            statusDesc.textContent =
+              'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+          }
+          cooldownUntil = Date.now() + 900;
+          return;
+        }
+
+        // Hiển thị ngay câu Transcript vừa nhận diện được lên màn hình điện thoại
+        teleTranscript.textContent = `"${recognizedTranscript}"`;
+        vadStateLabel.textContent = 'ĐỐI CHIẾU AI';
+
+        const formData = new FormData();
+        formData.append('audio', wavBlob, 'voice_16k.wav');
+        formData.append('transcript', recognizedTranscript);
+
+        // BƯỚC B1: Nếu đang ở chế độ Đăng ký mẫu (Enroll) -> Gửi Transcript + Audio lên Server lưu luôn!
+        if (
+          currentServerMode === 'enroll' &&
+          enrollInfo.active &&
+          enrollInfo.step === 'waiting_voice'
+        ) {
+          statusTitle.textContent = `Đang lưu câu lệnh "${recognizedTranscript}"...`;
+          statusDesc.textContent = `Đang trích xuất vector giọng nói 192 chiều cho ${enrollInfo.userName}...`;
+          formData.append('userId', enrollInfo.userId);
+
+          const resp = await fetch(`${API_BASE}/api/biometrics/enroll-voice`, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await resp.json();
+          if (!resp.ok || !data.ok) {
+            statusTitle.textContent = 'Chưa lưu được mẫu giọng nói';
+            statusDesc.textContent =
+              data.detail || 'Vui lòng nói một câu mật khẩu từ 2 từ trở lên.';
+            cooldownUntil = Date.now() + 1400;
+          } else {
+            teleTranscript.textContent = `"${data.voicePassphrase}" (ĐÃ LƯU)`;
+            teleScores.textContent = `SpeechBrain: 192-D OK`;
+            if (data.nextStep === 'waiting_face') {
+              // Bắt đầu đếm ngược 10 giây để người dùng đặt khuôn mặt vào khung mô hình
+              faceEnrollPrepStartAt = Date.now();
+              enrollInfo.step = 'waiting_face';
+              await setVisualPhase('face');
+              updateEnrollPrepTimerBadge();
+              statusTitle.textContent =
+                `Đã lưu câu lệnh! Bạn có 10s căn chỉnh Khuôn mặt`;
+              statusDesc.textContent = `Hãy đặt khuôn mặt của ${enrollInfo.userName} vào đúng KHUNG MÔ HÌNH BẦU DỤC trên màn hình trước khi gửi lên Server.`;
+              speakPrompt(
+                `Đã lưu câu lệnh ${data.voicePassphrase}. Bạn có 10 giây để đặt khuôn mặt vào đúng khung mô hình trên màn hình.`
+              );
+            } else {
+              statusTitle.textContent = '🎉 Đã đăng ký Giọng nói thành công!';
+              statusDesc.textContent = `Đã lưu câu mật khẩu "${data.voicePassphrase}" cho ${enrollInfo.userName}.`;
+              speakPrompt(
+                `Đã lưu giọng nói với câu mật khẩu ${data.voicePassphrase} thành công.`
+              );
+            }
+          }
+          return;
+        }
+
+        // BƯỚC B2: Chế độ Xác thực mở khóa (Verify) -> Gửi Transcript + Audio đối chiếu với DB
+        statusTitle.textContent = `Đang kiểm tra: "${recognizedTranscript}"...`;
+        statusDesc.textContent =
+          'Đối chiếu Transcript và đặc trưng giọng nói SpeechBrain 192-D...';
+
+        const resp = await fetch(`${API_BASE}/api/biometrics/verify-voice`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await resp.json();
+
+        if (data.silence) {
+          statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
+          statusDesc.textContent =
+            'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+          return;
+        }
+
+        teleTranscript.textContent = data.spokenText
+          ? `"${data.spokenText}"`
+          : `"${recognizedTranscript}"`;
+
+        if (data.voiceScore !== undefined) {
+          teleScores.textContent = `Voice: ${Math.round(
+            data.voiceScore * 100
+          )}% | Phrase: ${Math.round((data.phraseScore || 0) * 100)}%`;
+        }
+
+        if (data.matched && data.sessionToken) {
+          activeSessionToken = data.sessionToken;
+          activeSessionUser = data.userName;
+          sessionExpiresAt = Date.now() + (data.expiresInSeconds || 35) * 1000;
+          await setVisualPhase('face');
+          statusTitle.textContent = `Xin chào ${data.userName}! Đặt mặt vào khung mô hình`;
+          statusDesc.textContent = `Khớp câu lệnh "${data.spokenText}". Hãy đặt khuôn mặt vào đúng khung mô hình bầu dục để mở khóa...`;
+          speakPrompt(
+            `Xin chào ${data.userName}, vui lòng đặt khuôn mặt vào khung mô hình để mở khóa.`
+          );
+        } else {
+          statusTitle.textContent = 'Chưa khớp Giọng nói / Câu mật khẩu';
+          statusDesc.textContent =
+            data.reason || 'Vui lòng đọc đúng câu mật khẩu đã đăng ký.';
+          cooldownUntil = Date.now() + 1400;
+        }
+      } catch (_) {
+        statusTitle.textContent = 'Lỗi kết nối tới Biometric Server';
+        statusDesc.textContent = 'Đang tự động thử lại...';
+        cooldownUntil = Date.now() + 1800;
+      } finally {
+        isBusyUploading = false;
+        vadStateLabel.textContent = 'LẮNG NGHE';
+        vadIcon.textContent = '🎙️';
+      }
+    }
+
+    async function captureHighResFrameBlob() {
+      if (!videoEl.videoWidth || !videoEl.videoHeight) return null;
+      const maxW = 1920;
+      const scale = Math.min(1, maxW / videoEl.videoWidth);
+      const w = Math.round(videoEl.videoWidth * scale);
+      const h = Math.round(videoEl.videoHeight * scale);
+      canvasEl.width = w;
+      canvasEl.height = h;
+      const ctx = canvasEl.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0, w, h);
+      return new Promise((resolve) => {
+        canvasEl.toBlob((blob) => resolve(blob), 'image/jpeg', 0.92);
+      });
+    }
+
+    async function processFaceStep() {
+      if (isBusyUploading || Date.now() - lastFaceScanAt < 420) return;
+      if (Date.now() < cooldownUntil) return;
+      const frameBlob = await captureHighResFrameBlob();
+      if (!frameBlob) return;
+
+      lastFaceScanAt = Date.now();
+      isBusyUploading = true;
+
+      try {
+        if (
+          currentServerMode === 'enroll' &&
+          enrollInfo.active &&
+          enrollInfo.step === 'waiting_face'
+        ) {
+          const elapsedPrep = Date.now() - faceEnrollPrepStartAt;
+          const remPrepSec = Math.max(
+            0,
+            Math.ceil((FACE_ENROLL_PREP_MS - elapsedPrep) / 1000)
+          );
+
+          // Trong 10 giây đầu tiên: Chạy 5 thuật toán kiểm tra khuôn mặt theo thời gian thực & hiển thị trực tiếp trên màn hình
+          if (remPrepSec > 0) {
+            const checkForm = new FormData();
+            checkForm.append('image', frameBlob, 'check_guide.jpg');
+            const checkResp = await fetch(
+              `${API_BASE}/api/biometrics/check-face-frame`,
+              {
+                method: 'POST',
+                body: checkForm,
+              }
+            );
+            const checkData = await checkResp.json();
+            renderFaceAlgorithmHud(checkData);
+
+            if (checkData.aligned) {
+              updateFaceGuideVisual(
+                'aligned',
+                '✅ ĐẠT 5/5 THUẬT TOÁN — GIỮ YÊN!'
+              );
+              if (btnForceSnapFace) btnForceSnapFace.classList.remove('hidden');
+              statusTitle.textContent = `Tự động chụp sau ${remPrepSec}s (Đã đạt 5/5 chuẩn!)`;
+              statusDesc.textContent =
+                'Khuôn mặt đã khớp hoàn toàn khung mô hình & đạt đủ 5 thuật toán. Giữ yên hoặc bấm "CHỤP NGAY"...';
+            } else {
+              updateFaceGuideVisual(
+                'warning',
+                '⚠️ ĐANG KIỂM TRA 5 THUẬT TOÁN'
+              );
+              if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
+              statusTitle.textContent = `Còn ${remPrepSec}s căn chỉnh khuôn mặt vào mô hình`;
+              statusDesc.textContent =
+                checkData.detail ||
+                'Hãy di chuyển khuôn mặt vào chính giữa khung bầu dục trên màn hình.';
+            }
+            return;
+          }
+
+          // Sau khi hết 10 giây đếm ngược: Tự động chụp ngay khi đạt đủ 5 thuật toán
+          const formData = new FormData();
+          formData.append('userId', enrollInfo.userId);
+          formData.append('image', frameBlob, 'rear_cam_hd.jpg');
+
+          const resp = await fetch(`${API_BASE}/api/biometrics/enroll-face`, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await resp.json();
+          renderFaceAlgorithmHud(data);
+
+          if (resp.ok && data.ok) {
+            triggerShutterFlash();
+            if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
+            updateFaceGuideVisual('aligned', '📸 ĐÃ TỰ ĐỘNG CHỤP & LƯU HD');
+            teleScores.textContent = `FaceNet: 512-D (${data.resolution?.width}x${data.resolution?.height})`;
+            statusTitle.textContent = `🎉 Đã tự động chụp & lưu Khuôn mặt cho ${enrollInfo.userName}!`;
+            statusDesc.textContent =
+              'Khuôn mặt đạt chuẩn 5/5 thuật toán đã được lưu lên Server.';
+            speakPrompt(
+              `Đã tự động chụp và lưu khuôn mặt chuẩn cho ${enrollInfo.userName} thành công.`
+            );
+            enrollInfo.active = false;
+            enrollInfo.step = 'completed';
+            setTimeout(() => {
+              void setVisualPhase('voice');
+            }, 1400);
+          } else {
+            updateFaceGuideVisual(
+              data.aligned ? 'aligned' : 'warning',
+              data.countingDown
+                ? `⏳ CÒN ${data.secondsLeft}s CHUẨN BỊ`
+                : '⚠️ CHỜ ĐẠT ĐỦ 5/5 THUẬT TOÁN ĐỂ TỰ CHỤP'
+            );
+            if (data.aligned && btnForceSnapFace) {
+              btnForceSnapFace.classList.remove('hidden');
+            }
+            statusTitle.textContent = data.countingDown
+              ? `Tự động chụp sau ${data.secondsLeft}s...`
+              : 'Đang chờ khuôn mặt đạt đủ 5/5 thuật toán để tự chụp';
+            statusDesc.textContent =
+              data.detail ||
+              'Hãy đặt khuôn mặt nằm gọn vào giữa khung bầu dục — Hệ thống sẽ tự động chụp ngay khi đạt 5/5 tiêu chí!';
+          }
+          return;
+        }
+
+        if (!activeSessionToken) return;
+        const leftSec = Math.max(
+          0,
+          Math.ceil((sessionExpiresAt - Date.now()) / 1000)
+        );
+        camCountdown.textContent = `${leftSec}s`;
+        if (leftSec <= 0) {
+          activeSessionToken = null;
+          await setVisualPhase('voice');
+          statusTitle.textContent = 'Hết thời gian quét khuôn mặt';
+          statusDesc.textContent =
+            'Đã quay lại Bước 1. Vui lòng nói câu mật khẩu để thử lại.';
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('sessionToken', activeSessionToken);
+        formData.append('image', frameBlob, 'verify_rear_hd.jpg');
+
+        const resp = await fetch(`${API_BASE}/api/biometrics/verify-face`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await resp.json();
+        renderFaceAlgorithmHud(data);
+
+        if (data.unlocked) {
+          activeSessionToken = null;
+          triggerShutterFlash();
+          updateFaceGuideVisual('aligned', '🔓 XÁC THỰC KHUÔN MẶT ĐẠT');
+          teleScores.textContent = `Voice: ${Math.round(
+            (data.voiceScore || 0.85) * 100
+          )}% | Face: ${Math.round((data.faceScore || 0.88) * 100)}%`;
+          statusTitle.textContent = `🔓 ĐÃ MỞ KHÓA CHO ${data.userName.toUpperCase()}!`;
+          statusDesc.textContent =
+            'Đã gửi lệnh mở khóa (/SmartLock/Control/Remote_Open = true). Tự động khóa lại sau 4 giây.';
+          speakPrompt(`Xác thực thành công. Đã mở cửa cho ${data.userName}.`);
+          setTimeout(() => {
+            if (currentServerMode === 'verify') {
+              void setVisualPhase('voice');
+              statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
+              statusDesc.textContent =
+                'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+            }
+          }, 4000);
+        } else if (data.expired) {
+          activeSessionToken = null;
+          await setVisualPhase('voice');
+          statusTitle.textContent = 'Phiên xác thực đã hết hạn';
+          statusDesc.textContent =
+            data.reason || 'Vui lòng đọc lại câu mật khẩu.';
+        } else {
+          updateFaceGuideVisual(
+            data.aligned ? 'aligned' : 'warning',
+            data.aligned
+              ? '🔍 ĐANG ĐỐI CHIẾU VECTOR 512-D'
+              : '⚠️ ĐẶT MẶT VÀO KHUNG MÔ HÌNH'
+          );
+          if (data.faceScore !== undefined) {
+            teleScores.textContent = `FaceNet Similarity: ${Math.round(
+              data.faceScore * 100
+            )}%`;
+          }
+          statusDesc.textContent =
+            data.reason || 'Hãy đặt khuôn mặt vào đúng khung mô hình bầu dục...';
+        }
+      } catch (err) {
+        console.error('Face process error:', err);
+      } finally {
+        isBusyUploading = false;
+      }
+    }
+
+    async function pollKioskState() {
+      if (!kioskStarted || isPollingState) return;
+      isPollingState = true;
+      try {
+        const resp = await fetch(`${API_BASE}/api/biometrics/kiosk-state`);
+        if (!resp.ok) return;
+        const state = await resp.json();
+
+        const prevMode = currentServerMode;
+        const prevStep = enrollInfo.step;
+        currentServerMode = state.mode;
+        enrollInfo = state.enroll || { active: false, step: 'idle' };
+
+        if (currentServerMode === 'enroll' && enrollInfo.active) {
+          activeSessionToken = null;
+          enrollBanner.classList.remove('hidden');
+          enrollUserName.textContent = enrollInfo.userName || enrollInfo.userId;
+          enrollTargetBadge.textContent =
+            enrollInfo.target === 'both'
+              ? 'GIỌNG NÓI + KHUÔN MẶT'
+              : enrollInfo.target === 'voice'
+                ? 'CHỈ GIỌNG NÓI'
+                : 'CHỈ KHUÔN MẶT';
+          enrollPassphraseHint.textContent =
+            enrollInfo.step === 'waiting_face'
+              ? 'Hãy đặt khuôn mặt khớp vào KHUNG MÔ HÌNH BẦU DỤC trên camera (Có 10s để căn chỉnh trước khi chụp).'
+              : 'Hãy nói bất kỳ câu mật khẩu nào (tối thiểu 2 từ) vào điện thoại — Hệ thống tự nhận diện Transcript và lưu làm mật khẩu.';
+          teleMode.textContent = 'CHẾ ĐỘ ĐĂNG KÝ MẪU (ADMIN)';
+          teleMode.className = 'text-amber-400 font-bold';
+
+          if (enrollInfo.step === 'waiting_voice') {
+            if (prevMode !== 'enroll' || prevStep !== 'waiting_voice') {
+              await setVisualPhase('voice');
+              statusTitle.textContent = `Thu Giọng nói: ${enrollInfo.userName}`;
+              statusDesc.textContent =
+                'Hãy nói một câu mật khẩu bất kỳ (VD: "mở cửa cho tôi") để hệ thống xử lý Transcript và lưu lên Server.';
+              speakPrompt(
+                `Mời ${enrollInfo.userName} nói một câu mật khẩu bất kỳ vào điện thoại.`
+              );
+            }
+          } else if (enrollInfo.step === 'waiting_face') {
+            if (prevMode !== 'enroll' || prevStep !== 'waiting_face') {
+              // Khởi tạo đếm ngược 10 giây chuẩn bị khuôn mặt
+              faceEnrollPrepStartAt = Date.now();
+              await setVisualPhase('face');
+              updateEnrollPrepTimerBadge();
+              statusTitle.textContent = `Căn chỉnh Khuôn mặt (10s): ${enrollInfo.userName}`;
+              statusDesc.textContent =
+                'Hãy đặt khuôn mặt vào đúng KHUNG MÔ HÌNH BẦU DỤC trên màn hình. Hệ thống sẽ chụp sau 10 giây...';
+              speakPrompt(
+                `Mời ${enrollInfo.userName} đặt khuôn mặt vào đúng khung mô hình trên màn hình. Chụp sau 10 giây.`
+              );
+            }
+          }
+        } else {
+          enrollBanner.classList.add('hidden');
+          teleMode.textContent = state.biometricMode
+            ? 'TRỰC MỞ KHÓA TỰ ĐỘNG'
+            : 'ĐANG TẠM TẮT TRÊN ADMIN';
+          teleMode.className = state.biometricMode
+            ? 'text-emerald-400 font-bold'
+            : 'text-rose-400 font-bold';
+
+          if (prevMode === 'enroll') {
+            await setVisualPhase('voice');
+            statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
+            statusDesc.textContent =
+              'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+          }
+        }
+      } catch (_) {
+      } finally {
+        isPollingState = false;
+      }
+    }
+
+    btnStartKiosk.addEventListener('click', async () => {
+      if (isInsecureLan && (!window.isSecureContext || !navigator.mediaDevices)) {
+        window.location.href = httpsTargetUrl;
+        return;
+      }
+
+      try {
+        errorDetailBox.classList.add('hidden');
+
+        if ('wakeLock' in navigator) {
+          navigator.wakeLock.request('screen').catch(() => {});
+        }
+
+        // 1. Xin quyền Microphone trước
+        micStream = await getMediaStreamWithFallback([
+          {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: false,
+            },
+            video: false,
+          },
+          { audio: true, video: false },
+        ]);
+
+        // 2. Xin quyền Camera sau HD & khởi tạo sẵn
+        await ensureRearCameraHDActive();
+
+        const AudioContextClass =
+          window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass();
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+        }
+
+        const source = audioCtx.createMediaStreamSource(micStream);
+        scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+        source.connect(scriptProcessor);
+        scriptProcessor.connect(audioCtx.destination);
+
+        const inputSampleRate = audioCtx.sampleRate;
+        const maxPreRollChunks = 3;
+
+        scriptProcessor.onaudioprocess = (event) => {
+          const isVoicePhase = !voiceVisual.classList.contains('hidden');
+          if (
+            !isVoicePhase ||
+            isBusyUploading ||
+            isTtsSpeaking ||
+            Date.now() < cooldownUntil
+          ) {
+            return;
+          }
+
+          const input = event.inputBuffer.getChannelData(0);
+          let sumSq = 0;
+          for (let i = 0; i < input.length; i++) sumSq += input[i] * input[i];
+          const rms = Math.sqrt(sumSq / input.length);
+
+          // Cập nhật nền nhiễu thích nghi khi không nói
+          if (!isSpeaking && rms < 0.04) {
+            noiseFloor = 0.92 * noiseFloor + 0.08 * rms;
+          }
+          const dynamicVoiceThreshold = Math.max(0.042, noiseFloor * 2.8);
+
+          const pct = Math.min(100, Math.max(4, Math.round(rms * 600)));
+          vadMeter.style.width = `${pct}%`;
+          vadCore.style.transform = `scale(${1 + Math.min(0.22, rms * 1.6)})`;
+
+          const chunk16k = downsampleTo16kHz(
+            new Float32Array(input),
+            inputSampleRate
+          );
+          const now = Date.now();
+
+          if (rms > dynamicVoiceThreshold) {
+            if (!isSpeaking) {
+              isSpeaking = true;
+              speechStartTime = now;
+              voicedFrameCount = 0;
+              peakRmsInSegment = rms;
+              recordingChunks = [...preRollBuffer];
+              vadStateLabel.textContent = 'ĐANG THU...';
+              vadIcon.textContent = '🔴';
+            }
+            voicedFrameCount += 1;
+            if (rms > peakRmsInSegment) peakRmsInSegment = rms;
+            lastVoiceActiveTime = now;
+            recordingChunks.push(chunk16k);
+          } else {
+            if (!isSpeaking) {
+              preRollBuffer.push(chunk16k);
+              if (preRollBuffer.length > maxPreRollChunks) preRollBuffer.shift();
+            } else {
+              recordingChunks.push(chunk16k);
+              const silenceMs = now - lastVoiceActiveTime;
+              const voicedSpanMs = lastVoiceActiveTime - speechStartTime;
+              const totalElapsedMs = now - speechStartTime;
+
+              if (silenceMs > 850 || totalElapsedMs > 4600) {
+                const captured = recordingChunks;
+                const finalVoicedFrames = voicedFrameCount;
+                const finalVoicedSpan = voicedSpanMs;
+                const finalPeakRms = peakRmsInSegment;
+                resetVadBuffer();
+
+                // Chỉ gửi lên server khi thực sự có tối thiểu 6 khung giọng nói (~500ms phát âm liên tục)
+                // Loại bỏ hoàn toàn tiếng gõ nhẹ, tiếng ồn phòng hoặc khoảng lặng!
+                if (
+                  finalVoicedFrames >= 6 &&
+                  finalVoicedSpan >= 450 &&
+                  finalPeakRms >= 0.048
+                ) {
+                  const wavBlob = encodeWav16kHz(captured);
+                  void handleCapturedVoiceBlob(wavBlob);
+                } else {
+                  vadStateLabel.textContent = 'LẮNG NGHE';
+                  vadIcon.textContent = '🎙️';
+                }
+              }
+            }
+          }
+        };
+
+        initOverlay.classList.add('hidden');
+        kioskStage.classList.remove('hidden');
+        kioskStarted = true;
+
+        setInterval(pollKioskState, 1200);
+        setInterval(updateEnrollPrepTimerBadge, 250);
+        setInterval(() => {
+          const isFacePhase = !cameraVisual.classList.contains('hidden');
+          if (isFacePhase) {
+            void processFaceStep();
+          }
+        }, 500);
+      } catch (err) {
+        const errName = err && err.name ? err.name : 'Error';
+        const errMsg = err && err.message ? err.message : String(err);
+        showErrorDetail(`${errName}: ${errMsg}`);
+        if (isInsecureLan) {
+          httpsWarningBox.classList.remove('hidden');
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,5 +1,7 @@
 import type {
   AuthUser,
+  BiometricEnrollCommand,
+  BiometricEnrollTarget,
   LogEntry,
   MutationResult,
   User,
@@ -16,6 +18,7 @@ export interface MockControls {
   simulateCardScanDuplicate: () => void;
   simulateDoorOpenByKeypad: (userName?: string) => void;
   simulateIntrusionAlert: () => void;
+  simulatePhoneBiometricCapture?: () => void;
 }
 
 export interface SmartLockService extends LearnCardServiceAdapter {
@@ -37,6 +40,24 @@ export interface SmartLockService extends LearnCardServiceAdapter {
   triggerRemoteOpen: () => Promise<MutationResult>;
   triggerRestart: () => Promise<MutationResult>;
   triggerNeedSync: () => Promise<void>;
+
+  // Biometric Control & Remote Phone Enrollment
+  subscribeBiometricMode: (cb: (enabled: boolean) => void) => () => void;
+  setBiometricMode: (enabled: boolean) => Promise<MutationResult>;
+  subscribeBiometricEnroll: (
+    cb: (state: BiometricEnrollCommand) => void
+  ) => () => void;
+  startBiometricEnrollOnPhone: (params: {
+    userId: string;
+    userName: string;
+    target: BiometricEnrollTarget;
+    expectedPassphrase: string;
+  }) => Promise<void>;
+  cancelBiometricEnrollOnPhone: () => Promise<void>;
+  clearUserBiometrics: (
+    userId: string,
+    target: BiometricEnrollTarget
+  ) => Promise<MutationResult>;
 
   // Users CRUD (Multi-path atomic updates + .then(triggerNeedSync))
   subscribeUsers: (cb: (users: User[]) => void) => () => void;
@@ -95,3 +116,4 @@ export async function loadSmartLockService(): Promise<SmartLockService> {
   const { createFirebaseService } = await import('./firebaseService');
   return createFirebaseService();
 }
+
