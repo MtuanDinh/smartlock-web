@@ -8,11 +8,14 @@ import {
   RotateCcw,
   Send,
   Loader2,
+  Smartphone,
+  ExternalLink,
 } from 'lucide-react';
 import { useSystemStatus } from '../../hooks/useSystemStatus';
 import { useLockControl } from '../../hooks/useLockControl';
 import { LastBeatCounter } from '../../components/layout/LastBeatCounter';
 import { Button } from '../../components/ui/Button';
+import { Switch } from '../../components/ui/Switch';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 export const LockStatusHero: React.FC = () => {
@@ -25,12 +28,15 @@ export const LockStatusHero: React.FC = () => {
 
   const {
     isLockdown,
+    isBiometricMode,
     isSendingOpen,
     remoteOpenAck,
     isRestarting,
     isTogglingLockdown,
+    isTogglingBiometric,
     openDoorRemotely,
     setLockdownState,
+    setBiometricModeState,
     restartSystem,
   } = useLockControl();
 
@@ -353,6 +359,40 @@ export const LockStatusHero: React.FC = () => {
               >
                 {isLockdown ? 'Mở Trở Lại' : 'KHÓA CHẶT'}
               </Button>
+            </div>
+
+            {/* Chế độ Xác thực Sinh trắc học Kép (Giọng nói SpeechBrain + Khuôn mặt Cam sau HD) */}
+            <div className="mt-3 pt-3 border-t border-outline-variant/25 flex items-center justify-between gap-2 text-left">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <Smartphone className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span className="text-xs font-bold text-on-surface truncate">
+                    Sinh trắc học (Giọng nói + Mặt HD)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] text-outline">
+                    {isBiometricMode
+                      ? 'Trạm ĐT (/kiosk) đang bật tự động'
+                      : 'Đang tạm tắt xác thực từ ĐT'}
+                  </span>
+                  <a
+                    href={`${window.location.protocol}//${window.location.hostname}:8000/kiosk`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-0.5 text-[10px] font-bold text-primary hover:underline"
+                  >
+                    <span>Mở /kiosk</span>
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                </div>
+              </div>
+              <Switch
+                checked={isBiometricMode}
+                onCheckedChange={(checked) => void setBiometricModeState(checked)}
+                disabled={!isClientConnected || isTogglingBiometric}
+                ariaLabel="Bật hoặc tắt mở khóa bằng Giọng nói và Khuôn mặt"
+              />
             </div>
           </div>
         </div>

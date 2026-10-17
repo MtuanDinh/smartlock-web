@@ -9,10 +9,12 @@ export function useLockControl() {
   const { showToast } = useToast();
 
   const [isLockdown, setIsLockdown] = useState(false);
+  const [isBiometricMode, setIsBiometricMode] = useState(true);
   const [isSendingOpen, setIsSendingOpen] = useState(false);
   const [remoteOpenAck, setRemoteOpenAck] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [isTogglingLockdown, setIsTogglingLockdown] = useState(false);
+  const [isTogglingBiometric, setIsTogglingBiometric] = useState(false);
 
   const ackCleanupRef = useRef<(() => void) | null>(null);
   const ackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -20,11 +22,15 @@ export function useLockControl() {
 
   useEffect(() => {
     if (!service || !authUser) return;
-    const unsub = service.subscribeLockdown((lockdown) => {
+    const unsubLockdown = service.subscribeLockdown((lockdown) => {
       setIsLockdown(lockdown);
     });
+    const unsubBio = service.subscribeBiometricMode((enabled) => {
+      setIsBiometricMode(enabled);
+    });
     return () => {
-      unsub();
+      unsubLockdown();
+      unsubBio();
     };
   }, [service, authUser]);
 
@@ -118,6 +124,34 @@ export function useLockControl() {
     [service, isClientConnected, connectionState, showToast]
   );
 
+  const setBiometricModeState = useCallback(
+    async (nextEnabled: boolean) => {
+      if (!service || !isClientConnected) return;
+      setIsTogglingBiometric(true);
+      try {
+        await service.setBiometricMode(nextEnabled);
+        showToast({
+          title: nextEnabled
+            ? 'Đã bật Mở khóa Sinh trắc học (Giọng nói + Khuôn mặt)'
+            : 'Đã tắt Mở khóa Sinh trắc học',
+          description: nextEnabled
+            ? 'Trạm điện thoại Kiosk (/kiosk) được phép xác thực giọng nói SpeechBrain & khuôn mặt FaceNet.'
+            : 'Tạm ngưng nhận lệnh mở khóa từ trạm điện thoại Kiosk.',
+          variant: nextEnabled ? 'success' : 'info',
+        });
+      } catch {
+        showToast({
+          title: 'Không thể đổi trạng thái Sinh trắc học',
+          description: 'Vui lòng kiểm tra kết nối mạng và thử lại.',
+          variant: 'error',
+        });
+      } finally {
+        setIsTogglingBiometric(false);
+      }
+    },
+    [service, isClientConnected, showToast]
+  );
+
   const restartSystem = useCallback(async () => {
     if (!service || !isClientConnected || connectionState !== 'online') return;
     setIsRestarting(true);
@@ -141,7 +175,6 @@ export function useLockControl() {
       showToast({
         title: 'Không thể gửi lệnh khởi động lại',
         description: 'Vui lòng thử lại sau.',
-        variant: 'error',
       });
     } finally {
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
@@ -153,12 +186,16 @@ export function useLockControl() {
 
   return {
     isLockdown,
+    isBiometricMode,
     isSendingOpen,
     remoteOpenAck,
     isRestarting,
     isTogglingLockdown,
+    isTogglingBiometric,
     openDoorRemotely,
     setLockdownState,
+    setBiometricModeState,
     restartSystem,
   };
 }
+

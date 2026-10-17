@@ -14,12 +14,16 @@ import {
   ShieldCheck,
   CheckCircle2,
   AlertTriangle,
+  Mic,
+  Camera,
+  Smartphone,
 } from 'lucide-react';
 import { useUsers } from '../../hooks/useUsers';
 import { useSystemStatus } from '../../hooks/useSystemStatus';
 import { UserFormModal } from './UserFormModal';
 import { PinModal } from './PinModal';
 import { LearnCardModal } from './LearnCardModal';
+import { BiometricEnrollModal } from './BiometricEnrollModal';
 import { Button } from '../../components/ui/Button';
 import { Switch } from '../../components/ui/Switch';
 import { Skeleton } from '../../components/ui/Skeleton';
@@ -65,6 +69,7 @@ export const UsersPage: React.FC = () => {
     pendingUserId,
     isSubmittingModal,
     learnCardState,
+    biometricEnrollState,
     addUser,
     editUserName,
     changeUserPin,
@@ -72,6 +77,9 @@ export const UsersPage: React.FC = () => {
     deleteUser,
     startLearnCard,
     cancelLearnCard,
+    startBiometricEnroll,
+    cancelBiometricEnroll,
+    clearBiometrics,
   } = useUsers();
 
   const { connectionState, isClientConnected, hasUnsyncedChanges } = useSystemStatus();
@@ -86,7 +94,17 @@ export const UsersPage: React.FC = () => {
   }>({ open: false, mode: 'add', user: null });
 
   const [pinModalUser, setPinModalUser] = useState<User | null>(null);
+  const [biometricModalUser, setBiometricModalUser] = useState<User | null>(
+    null
+  );
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
+
+  const liveBiometricUser = useMemo(() => {
+    if (!biometricModalUser) return null;
+    return (
+      users.find((u) => u.id === biometricModalUser.id) || biometricModalUser
+    );
+  }, [users, biometricModalUser]);
 
   const toggleRevealPin = (userId: string) => {
     setRevealedPins((prev) => ({ ...prev, [userId]: !prev[userId] }));
@@ -559,6 +577,46 @@ export const UsersPage: React.FC = () => {
                           </Button>
                         )}
                       </div>
+
+                      {/* Biometrics (Voice + Rear Cam Face) Box */}
+                      <div className="col-span-2 flex items-center justify-between gap-2 pt-2 border-t border-outline-variant/25">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-outline mr-1">
+                            Sinh trắc học:
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                              user.hasVoice
+                                ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                : 'bg-surface-container-high text-outline border-outline-variant/30'
+                            }`}
+                          >
+                            <Mic className="h-2.5 w-2.5" />
+                            {user.hasVoice ? 'Đã có giọng' : 'Chưa có giọng'}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                              user.hasFace
+                                ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30'
+                                : 'bg-surface-container-high text-outline border-outline-variant/30'
+                            }`}
+                          >
+                            <Camera className="h-2.5 w-2.5" />
+                            {user.hasFace ? 'Đã có mặt' : 'Chưa có mặt'}
+                          </span>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={!canEdit}
+                          disabledTooltip={editTooltip}
+                          onClick={() => setBiometricModalUser(user)}
+                          className="text-[11px] py-1 shrink-0"
+                          leftIcon={<Smartphone className="h-3 w-3" />}
+                        >
+                          {user.hasVoice || user.hasFace ? 'Đổi mẫu' : '+ Thu từ ĐT'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -574,6 +632,9 @@ export const UsersPage: React.FC = () => {
                     <th className="px-4 py-3.5 text-center">Quyền Mở Cửa</th>
                     <th className="px-4 py-3.5 text-center">Mã PIN Bảo Mật</th>
                     <th className="px-4 py-3.5 text-center">Thẻ Từ RFID</th>
+                    <th className="px-4 py-3.5 text-center">
+                      Giọng Nói &amp; Khuôn Mặt (ĐT)
+                    </th>
                     <th className="py-3.5 pl-4 pr-6 text-right">Thao Tác</th>
                   </tr>
                 </thead>
@@ -721,6 +782,62 @@ export const UsersPage: React.FC = () => {
                           )}
                         </td>
 
+                        {/* Biometrics (SpeechBrain Voice + FaceNet Rear Cam) */}
+                        <td className="px-4 py-4 text-center">
+                          {user.hasVoice || user.hasFace ? (
+                            <div className="inline-flex items-center justify-center gap-1.5 flex-wrap">
+                              <span
+                                title={
+                                  user.voicePassphrase
+                                    ? `Câu mật khẩu: "${user.voicePassphrase}"`
+                                    : 'Giọng nói SpeechBrain 192-D'
+                                }
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold border ${
+                                  user.hasVoice
+                                    ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                    : 'bg-surface-container-high text-outline border-outline-variant/30'
+                                }`}
+                              >
+                                <Mic className="h-3 w-3" />
+                                <span>{user.hasVoice ? 'Giọng' : '—'}</span>
+                              </span>
+                              <span
+                                title="Khuôn mặt FaceNet 512-D (Camera sau HD)"
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold border ${
+                                  user.hasFace
+                                    ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30'
+                                    : 'bg-surface-container-high text-outline border-outline-variant/30'
+                                }`}
+                              >
+                                <Camera className="h-3 w-3" />
+                                <span>{user.hasFace ? 'Mặt HD' : '—'}</span>
+                              </span>
+                              <button
+                                type="button"
+                                aria-label="Cập nhật Giọng nói & Khuôn mặt qua Điện thoại"
+                                title="Thu lại / Thay đổi Giọng nói & Khuôn mặt qua Điện thoại"
+                                disabled={!canEdit}
+                                onClick={() => setBiometricModalUser(user)}
+                                className="p-1 text-outline hover:text-primary rounded transition-colors disabled:opacity-40"
+                              >
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={!canEdit}
+                              disabledTooltip={editTooltip}
+                              onClick={() => setBiometricModalUser(user)}
+                              className="rounded-xl text-xs"
+                              leftIcon={<Smartphone className="h-3.5 w-3.5" />}
+                            >
+                              + Thu từ ĐT
+                            </Button>
+                          )}
+                        </td>
+
                         {/* Actions */}
                         <td className="py-4 pl-4 pr-6 text-right">
                           <button
@@ -745,18 +862,18 @@ export const UsersPage: React.FC = () => {
 
       {/* 3. 2 Practical Guidance Cards at Bottom */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 animate-stagger-3">
-        {/* Card 1: Gán thẻ từ RFID */}
+        {/* Card 1: Gán thẻ từ RFID & Sinh trắc học qua Điện thoại */}
         <div className="card-glass card-glass-interactive kpi-glass-purple rounded-2xl p-5 shadow-sm">
           <div className="flex items-center gap-2.5 mb-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-tertiary-fixed/50 text-tertiary border border-tertiary/20">
               <Radio className="h-4 w-4" />
             </span>
             <h3 className="text-sm font-bold text-on-surface">
-              Quy trình Gán thẻ từ RFID
+              Quy trình Gán Thẻ RFID &amp; Sinh Trắc Học Điện Thoại
             </h3>
           </div>
           <p className="text-xs leading-relaxed text-on-surface-variant">
-            Nhấn nút <strong>Học thẻ</strong> trên hàng thành viên tương ứng. Màn hình LCD 16x2 trên ổ khóa sẽ hiển thị <span className="font-mono text-primary font-bold">"CHE DO THEM THE"</span>. Quẹt thẻ MIFARE 13.56 MHz vào đầu đọc RC522. Hệ thống sẽ tự động bắt mã UID và hoàn tất trong tối đa 60 giây.
+            Nhấn <strong>Học thẻ</strong> để quẹt thẻ MIFARE 13.56 MHz trên khóa, hoặc nhấn <strong>+ Thu từ ĐT</strong> để phát lệnh sang điện thoại Kiosk (<span className="font-mono text-primary font-bold">/kiosk</span>) tự động thu giọng nói (SpeechBrain) và chụp khuôn mặt bằng <strong>Camera sau độ phân giải cao (Full HD)</strong>.
           </p>
         </div>
 
@@ -767,11 +884,11 @@ export const UsersPage: React.FC = () => {
               <ShieldCheck className="h-4 w-4" />
             </span>
             <h3 className="text-sm font-bold text-on-surface">
-              Quy tắc Mã PIN An Toàn
+              Quy tắc Mã PIN &amp; Câu Nói Mật Khẩu
             </h3>
           </div>
           <p className="text-xs leading-relaxed text-on-surface-variant">
-            Mã PIN hợp lệ dài từ <strong>4 đến 6 chữ số</strong> và không được trùng lặp giữa các thành viên. Tuyệt đối không đặt mã <span className="font-mono text-error font-bold">999999</span> (mã dành riêng của ổ khóa để khôi phục cấu hình Wi-Fi). Tên hiển thị trên LCD tối đa 16 ký tự không dấu.
+            Mã PIN hợp lệ dài từ <strong>4 đến 6 chữ số</strong> (không đặt <span className="font-mono text-error font-bold">999999</span>). Với Sinh trắc học, hệ thống yêu cầu khớp đồng thời <strong>đúng giọng người nói + đúng câu mật khẩu</strong> rồi mới xác thực khuôn mặt để mở cửa.
           </p>
         </div>
       </div>
@@ -789,6 +906,10 @@ export const UsersPage: React.FC = () => {
         isClientConnected={isClientConnected}
         onSubmitAdd={addUser}
         onSubmitEditName={editUserName}
+        onTriggerBiometricAfterAdd={(createdUser, target, passphrase) => {
+          setBiometricModalUser(createdUser);
+          void startBiometricEnroll(createdUser, target, passphrase);
+        }}
       />
 
       <PinModal
@@ -805,6 +926,19 @@ export const UsersPage: React.FC = () => {
 
       <LearnCardModal state={learnCardState} onCancel={cancelLearnCard} />
 
+      <BiometricEnrollModal
+        open={Boolean(liveBiometricUser)}
+        onOpenChange={(open) => {
+          if (!open) setBiometricModalUser(null);
+        }}
+        user={liveBiometricUser}
+        enrollState={biometricEnrollState}
+        isClientConnected={isClientConnected}
+        onStartEnroll={startBiometricEnroll}
+        onCancelEnroll={cancelBiometricEnroll}
+        onClearBiometrics={clearBiometrics}
+      />
+
       <ConfirmDialog
         open={Boolean(deleteConfirmUser)}
         onOpenChange={(open) => {
@@ -818,7 +952,7 @@ export const UsersPage: React.FC = () => {
               <strong className="font-bold text-on-surface">
                 [{deleteConfirmUser.name}]
               </strong>{' '}
-              cùng toàn bộ mã PIN và thẻ từ khỏi bộ nhớ ổ khóa?
+              cùng toàn bộ mã PIN, thẻ từ và dữ liệu sinh trắc học khỏi hệ thống?
             </>
           ) : (
             ''
@@ -839,3 +973,4 @@ export const UsersPage: React.FC = () => {
     </div>
   );
 };
+

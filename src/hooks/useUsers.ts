@@ -5,7 +5,13 @@ import {
   createLearnCardController,
   type LearnCardSnapshot,
 } from '../lib/learnCardMachine';
-import type { MutationResult, User, UserStatus } from '../types';
+import type {
+  BiometricEnrollCommand,
+  BiometricEnrollTarget,
+  MutationResult,
+  User,
+  UserStatus,
+} from '../types';
 
 export function useUsers() {
   const { service, authUser, connectionState, isClientConnected } =
@@ -24,6 +30,20 @@ export function useUsers() {
     initialCard: '',
     needsCancelRecovery: false,
   });
+
+  const [biometricEnrollState, setBiometricEnrollState] =
+    useState<BiometricEnrollCommand>({
+      active: false,
+      userId: '',
+      userName: '',
+      target: 'both',
+      expectedPassphrase: '',
+      step: 'idle',
+      message: '',
+      updatedAt: 0,
+    });
+
+  const prevBioActiveRef = useRef(false);
 
   const controllerRef = useRef<ReturnType<
     typeof createLearnCardController
@@ -106,6 +126,27 @@ export function useUsers() {
     };
   }, [service, authUser]);
 
+  // Lắng nghe trạng thái phiên thu mẫu Sinh trắc học trên Điện thoại Kiosk
+  useEffect(() => {
+    if (!service || !authUser) return;
+    const unsub = service.subscribeBiometricEnroll((state) => {
+      setBiometricEnrollState(state);
+      if (prevBioActiveRef.current && !state.active && state.step === 'completed') {
+        showToast({
+          title: 'Đã thu Sinh trắc học từ Điện thoại!',
+          description:
+            state.message ||
+            `Đã cập nhật dữ liệu Giọng nói / Khuôn mặt cho ${state.userName}.`,
+          variant: 'success',
+        });
+      }
+      prevBioActiveRef.current = state.active;
+    });
+    return () => {
+      unsub();
+    };
+  }, [service, authUser, showToast]);
+
   const existingPasswords = useMemo(() => {
     return users
       .map((u) => String(u.pass ?? '').trim())
@@ -140,7 +181,7 @@ export function useUsers() {
   );
 
   const addUser = useCallback(
-    async (normalizedName: string, pin: string): Promise<boolean> => {
+    async (normalizedName: string, pin: string): Promise<string | false> => {
       if (!service || !isClientConnected) return false;
       setIsSubmittingModal(true);
       try {
@@ -150,7 +191,7 @@ export function useUsers() {
           'Đã thêm thành viên mới',
           `Thành viên "${normalizedName}" đã được thêm vào hệ thống.`
         );
-        return true;
+        return res.userId || `user_${Date.now()}`;
       } catch {
         showToast({
           title: 'Không thể thêm thành viên',
@@ -309,7 +350,7 @@ export function useUsers() {
         handleMutationFeedback(
           res,
           'Đã xóa thành viên',
-          `Đã xóa vĩnh viễn "${user.name}" cùng toàn bộ quyền truy cập.`
+          `Đã xóa vĩnh viễn "${user.name}" cùng toàn bộ quyền truy cập và dữ liệu sinh trắc học.`
         );
         return true;
       } catch {
@@ -365,6 +406,86 @@ export function useUsers() {
     controllerRef.current.resetToIdle();
   }, []);
 
+  const startBiometricEnroll = useCallback(
+    async (
+      user: { id: string; name: string; status?: UserStatus },
+      target: BiometricEnrollTarget,
+      expectedPassphrase: string
+    ) => {
+      if (!service || !isClientConnected) return;
+      if (user.status === 'disabled') {
+        showToast({
+          title: 'Thành viên đang bị khóa',
+          description:
+            'Vui lòng mở khóa thành viên trước khi đăng ký Giọng nói / Khuôn mặt.',
+          variant: 'warning',
+        });
+        return;
+      }
+      try {
+        await service.startBiometricEnrollOnPhone({
+          userId: user.id,
+          userName: user.name,
+          target,
+          expectedPassphrase:
+            expectedPassphrase.trim() ||
+            `mở cửa cho ${user.name.toLowerCase()}`,
+        });
+      } catch {
+        showToast({
+          title: 'Không thể gửi lệnh thu mẫu xuống điện thoại',
+          description: 'Vui lòng kiểm tra kết nối mạng và thử lại.',
+          variant: 'error',
+        });
+      }
+    },
+    [service, isClientConnected, showToast]
+  );
+
+  const cancelBiometricEnroll = useCallback(async () => {
+    if (!service) return;
+    try {
+      await service.cancelBiometricEnrollOnPhone();
+      showToast({
+        title: 'Đã hủy thu mẫu trên điện thoại',
+        description: 'Điện thoại Kiosk đã quay về chế độ trực mở khóa.',
+        variant: 'info',
+      });
+    } catch {
+      // ignore
+    }
+  }, [service, showToast]);
+
+  const clearBiometrics = useCallback(
+    async (user: User, target: BiometricEnrollTarget) => {
+      if (!service || !isClientConnected) return;
+      setPendingUserId(user.id);
+      try {
+        await service.clearUserBiometrics(user.id, target);
+        showToast({
+          title: 'Đã xóa dữ liệu Sinh trắc học',
+          description: `Đã gỡ dữ liệu ${
+            target === 'both'
+              ? 'Giọng nói & Khuôn mặt'
+              : target === 'voice'
+                ? 'Giọng nói'
+                : 'Khuôn mặt'
+          } của "${user.name}".`,
+          variant: 'info',
+        });
+      } catch {
+        showToast({
+          title: 'Không thể xóa dữ liệu Sinh trắc học',
+          description: 'Vui lòng thử lại sau.',
+          variant: 'error',
+        });
+      } finally {
+        setPendingUserId(null);
+      }
+    },
+    [service, isClientConnected, showToast]
+  );
+
   return {
     users,
     isLoading,
@@ -372,6 +493,7 @@ export function useUsers() {
     pendingUserId,
     isSubmittingModal,
     learnCardState,
+    biometricEnrollState,
     addUser,
     editUserName,
     changeUserPin,
@@ -380,5 +502,9 @@ export function useUsers() {
     startLearnCard,
     cancelLearnCard,
     closeLearnCardModal,
+    startBiometricEnroll,
+    cancelBiometricEnroll,
+    clearBiometrics,
   };
 }
+

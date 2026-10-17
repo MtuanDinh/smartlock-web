@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAddUserUpdates,
   buildChangePinUpdates,
+  buildClearBiometricUpdates,
   buildDeleteUserUpdates,
   buildEditNameUpdates,
   buildToggleStatusUpdates,
@@ -105,10 +106,11 @@ describe('userMutations builders', () => {
     });
   });
 
-  it('buildDeleteUserUpdates removes Passwords and RFID only when user was active', () => {
+  it('buildDeleteUserUpdates removes Biometrics always and removes Passwords/RFID when user was active', () => {
     const activeDel = buildDeleteUserUpdates('user_1', '0123', 'AABB', 'active');
     expect(activeDel).toEqual({
       'SmartLock/Users/user_1': null,
+      'SmartLock/Biometrics/user_1': null,
       'SmartLock/Passwords/0123': null,
       'SmartLock/RFID/AABB': null,
     });
@@ -116,6 +118,22 @@ describe('userMutations builders', () => {
     const disabledDel = buildDeleteUserUpdates('user_2', '0123', 'AABB', 'disabled');
     expect(disabledDel).toEqual({
       'SmartLock/Users/user_2': null,
+      'SmartLock/Biometrics/user_2': null,
+    });
+  });
+
+  it('buildClearBiometricUpdates clears voice, face, or both', () => {
+    expect(buildClearBiometricUpdates('user_1', 'voice')).toEqual({
+      'SmartLock/Users/user_1/hasVoice': false,
+      'SmartLock/Users/user_1/voicePassphrase': null,
+      'SmartLock/Biometrics/user_1/voiceEmbedding': null,
+      'SmartLock/Biometrics/user_1/voicePassphrase': null,
+    });
+
+    expect(buildClearBiometricUpdates('user_1', 'face')).toEqual({
+      'SmartLock/Users/user_1/hasFace': false,
+      'SmartLock/Biometrics/user_1/faceEmbedding': null,
     });
   });
 });
+

@@ -21,11 +21,15 @@ describe('getLogMeta', () => {
     expect(meta.cleanActionText).toBe('Mở bằng nút bấm');
   });
 
-  it('marks actions starting with "Mở" (including "(Offline)") as isDoorOpen = true', () => {
+  it('marks actions starting with "Mở" (including "(Offline)" and "Mở bằng Sinh trắc học") as isDoorOpen = true', () => {
     expect(getLogMeta('Mở bằng Mật khẩu').isDoorOpen).toBe(true);
     expect(getLogMeta('Mở bằng Thẻ từ (Offline)').isDoorOpen).toBe(true);
     expect(getLogMeta('Mở cửa qua Web').isDoorOpen).toBe(true);
     expect(getLogMeta('Mở bằng nút bấm (Offline)').isDoorOpen).toBe(true);
+    const bioMeta = getLogMeta('Mở bằng Sinh trắc học');
+    expect(bioMeta.isDoorOpen).toBe(true);
+    expect(bioMeta.category).toBe('access');
+    expect(bioMeta.colorVariant).toBe('success');
   });
 
   it('does NOT count "Thêm thẻ mới" as a door open event', () => {
