@@ -105,17 +105,24 @@ class BiometricEngine:
         """
         Ngưỡng Cosine Similarity khuôn mặt:
         - 0.65 khi sử dụng mạng nơ-ron sâu FaceNet-PyTorch (InceptionResnetV1).
-        - 0.48 khi sử dụng bộ mã hóa không gian / đạo hàm Laplacian 512-D dự phòng.
+        - 0.38 khi sử dụng OpenCV SFace ONNX (MobileFaceNet - khuyến nghị ~0.363).
+        - 0.40 khi sử dụng bộ mã hóa không gian / đạo hàm Laplacian 512-D dự phòng.
         """
-        return 0.65 if self.facenet_ready else 0.48
+        if self.facenet_ready:
+            return 0.65
+        if self.sface_ready:
+            return 0.38
+        return 0.40
 
     def __init__(self) -> None:
         self.speaker_model = None
         self.mtcnn = None
         self.facenet = None
         self.yunet_detector = None
+        self.sface_recognizer = None
         self.speechbrain_ready = False
         self.facenet_ready = False
+        self.sface_ready = False
         self.asr_ready = False
         self._dct_matrix = self._build_dct_matrix(n_mfcc=32, n_mels=64)
         self._init_models()
@@ -130,7 +137,7 @@ class BiometricEngine:
         return mat.astype(np.float32)
 
     def _init_models(self) -> None:
-        # 0. Khởi tạo OpenCV 5.0 YuNet DNN Face & 5-Landmark Detector
+        # 0. Khởi tạo OpenCV 5.0 YuNet DNN Face & 5-Landmark Detector + SFace Deep Recognizer
         try:
             import urllib.request
             import cv2  # type: ignore
@@ -146,9 +153,19 @@ class BiometricEngine:
                     yunet_path, "", (320, 320), 0.42, 0.3, 5000
                 )
                 logger.info("OpenCV 5.0 YuNet DNN Face & 5-Landmark Detector initialized.")
+
+            sface_path = os.path.join(models_dir, "face_recognition_sface_2021dec.onnx")
+            if not os.path.exists(sface_path):
+                sface_url = "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
+                urllib.request.urlretrieve(sface_url, sface_path)
+            if hasattr(cv2, "FaceRecognizerSF"):
+                self.sface_recognizer = cv2.FaceRecognizerSF.create(sface_path, "")
+                self.sface_ready = True
+                logger.info("OpenCV SFace Deep CNN Face Recognizer (128-D ONNX) initialized.")
         except Exception as exc:
-            self.yunet_detector = None
-            logger.warning("YuNet detector init warning: %s", exc)
+            self.sface_recognizer = None
+            self.sface_ready = False
+            logger.warning("YuNet / SFace init warning: %s", exc)
 
         # 1. Khởi tạo SpeechRecognition (Vietnamese ASR)
         try:
@@ -212,16 +229,24 @@ class BiometricEngine:
             )
 
     def get_status(self) -> Dict[str, object]:
+        if self.facenet_ready:
+            face_model = "facenet-pytorch/vggface2 (512-D)"
+            face_dim = 512
+        elif self.sface_ready:
+            face_model = "opencv-sface/mobilefacenet (128-D)"
+            face_dim = 128
+        else:
+            face_model = "yunet-5landmarks + facenet-spatial (512-D)"
+            face_dim = 512
+
         return {
             "speechbrain": "speechbrain/spkrec-ecapa-voxceleb (192-D)"
             if self.speechbrain_ready
             else "speechbrain-compatible-mfcc-cmvn (192-D)",
-            "facenet": "facenet-pytorch/vggface2 (512-D)"
-            if self.facenet_ready
-            else "yunet-5landmarks + facenet-spatial (512-D)",
+            "facenet": face_model,
             "asr": "vi-VN Google ASR Transcript" if self.asr_ready else "unavailable",
             "voiceDimension": 192,
-            "faceDimension": 512,
+            "faceDimension": face_dim,
         }
 
     # =========================================================================
@@ -718,6 +743,27 @@ class BiometricEngine:
         h_box = int(round(detected_row[3] * scale_y))
         conf = float(detected_row[14])
 
+        orig_detected_row = np.array(
+            [
+                detected_row[0] * scale_x,
+                detected_row[1] * scale_y,
+                detected_row[2] * scale_x,
+                detected_row[3] * scale_y,
+                detected_row[4] * scale_x,
+                detected_row[5] * scale_y,
+                detected_row[6] * scale_x,
+                detected_row[7] * scale_y,
+                detected_row[8] * scale_x,
+                detected_row[9] * scale_y,
+                detected_row[10] * scale_x,
+                detected_row[11] * scale_y,
+                detected_row[12] * scale_x,
+                detected_row[13] * scale_y,
+                detected_row[14],
+            ],
+            dtype=np.float32,
+        )
+
         # 5 điểm mốc chuẩn hóa (0.0 -> 1.0): [Mắt phải, Mắt trái, Chóp mũi, Miệng phải, Miệng trái]
         landmarks_norm = [
             [
@@ -921,15 +967,19 @@ class BiometricEngine:
             "bbox": bbox_norm,
             "landmarks": landmarks_norm,
             "checks": checks,
+            "orig_detected_row": orig_detected_row,
+            "bgr_full": bgr_full,
         }
         return face_crop_pil, meta
 
     def _validate_and_crop_face_in_guide(
         self, img: Image.Image
     ) -> Tuple[Image.Image, Dict[str, object]]:
-        """Kiểm tra khuôn mặt đạt đủ 5 thuật toán chuẩn trước khi trích xuất vector 512-D."""
+        """Kiểm tra khuôn mặt đạt đủ 5 thuật toán chuẩn trước khi trích xuất vector 512-D / 128-D."""
         face_crop_pil, meta = self.evaluate_face_frame(img)
         if not meta.get("aligned") or face_crop_pil is None:
+            meta.pop("orig_detected_row", None)
+            meta.pop("bgr_full", None)
             err = ValueError(str(meta.get("detail") or "Khuôn mặt chưa khớp khung mô hình."))
             setattr(err, "face_meta", meta)
             raise err
@@ -940,13 +990,19 @@ class BiometricEngine:
         img = Image.open(io.BytesIO(image_bytes))
         img = ImageOps.exif_transpose(img).convert("RGB")
         _, meta = self.evaluate_face_frame(img)
+        meta.pop("orig_detected_row", None)
+        meta.pop("bgr_full", None)
         return meta
 
-    def extract_face_embedding(self, image_bytes: bytes) -> Tuple[List[float], Dict[str, object]]:
+    def extract_face_embedding(
+        self, image_bytes: bytes, target_dim: Optional[int] = None
+    ) -> Tuple[List[float], Dict[str, object]]:
         """
         Nhận ảnh chụp từ Camera sau của điện thoại (độ phân giải cao),
-        bắt buộc khuôn mặt phải nằm đúng trong khung mô hình chuẩn,
-        sau đó trích xuất vector 512 chiều (L2-normalized).
+        bắt buộc khuôn mặt phải nằm đúng trong khung mô hình chuẩn (5/5 thuật toán),
+        sau đó trích xuất vector đặc trưng (L2-normalized).
+        - Nếu target_dim == 512: trích xuất vector không gian 512-D tương thích ngược.
+        - Mặc định hoặc target_dim == 128: trích xuất SFace 128-D Deep CNN.
         """
         img = Image.open(io.BytesIO(image_bytes))
         img = ImageOps.exif_transpose(img).convert("RGB")
@@ -954,8 +1010,63 @@ class BiometricEngine:
 
         # Bước 1: Kiểm tra khuôn mặt đã đạt 5 thuật toán chuẩn hay chưa
         face_crop_pil, meta = self._validate_and_crop_face_in_guide(img)
+        orig_row = meta.pop("orig_detected_row", None)
+        bgr_full = meta.pop("bgr_full", None)
 
-        # Bước 2: Trích xuất đặc trưng 512 chiều
+        # Bước 2: Trích xuất đặc trưng
+        # 2a. Nếu yêu cầu 512-D hoặc cả SFace và FaceNet đều không sẵn sàng
+        if target_dim == 512 or (not self.sface_ready and not self.facenet_ready):
+            if self.facenet_ready and self.mtcnn is not None and self.facenet is not None:
+                import torch  # type: ignore
+
+                face_tensor = self.mtcnn(img)
+                if face_tensor is None:
+                    raise ValueError(
+                        "Không tìm thấy khuôn mặt rõ nét trong khung mô hình. Vui lòng nhìn thẳng vào camera sau."
+                    )
+                if face_tensor.ndim == 3:
+                    face_tensor = face_tensor.unsqueeze(0)
+                with torch.no_grad():
+                    emb = self.facenet(face_tensor).squeeze().cpu().numpy()
+                return l2_normalize(emb), meta
+
+            arr = np.asarray(face_crop_pil, dtype=np.float32) / 255.0
+            if float(np.std(arr)) < 0.05:
+                raise ValueError(
+                    "Khung hình khuôn mặt thiếu độ tương phản. Vui lòng hướng camera sau vào khuôn mặt nơi đủ sáng."
+                )
+
+            gray = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
+            gray = (gray - float(np.mean(gray))) / (float(np.std(gray)) + 1e-5)
+
+            small_16 = np.asarray(
+                Image.fromarray((gray * 32.0 + 128.0).clip(0, 255).astype(np.uint8)).resize(
+                    (16, 16), Image.Resampling.BILINEAR
+                ),
+                dtype=np.float32,
+            ).flatten()
+            small_16 = small_16 - float(np.mean(small_16))
+            gx = np.diff(gray, axis=1)[:, :63]
+            gy = np.diff(gray, axis=0)[:63, :]
+            gx_128 = np.interp(
+                np.linspace(0, gx.size - 1, 128), np.arange(gx.size), gx.flatten()
+            )
+            gy_128 = np.interp(
+                np.linspace(0, gy.size - 1, 128), np.arange(gy.size), gy.flatten()
+            )
+            emb_512 = np.concatenate([small_16 / 32.0, gx_128, gy_128], axis=0)
+            emb_512 = emb_512 - float(np.mean(emb_512))
+            return l2_normalize(emb_512), meta
+
+        # 2b. Trích xuất bằng SFace Deep CNN (128-D) với 5-Landmark Affine Alignment
+        if self.sface_ready and self.sface_recognizer is not None and bgr_full is not None and orig_row is not None:
+            aligned_face = self.sface_recognizer.alignCrop(
+                bgr_full, np.asarray(orig_row, dtype=np.float32)
+            )
+            feat = self.sface_recognizer.feature(aligned_face).flatten()
+            return l2_normalize(feat), meta
+
+        # 2c. Fallback FaceNet PyTorch nếu có
         if self.facenet_ready and self.mtcnn is not None and self.facenet is not None:
             import torch  # type: ignore
 
@@ -970,31 +1081,5 @@ class BiometricEngine:
                 emb = self.facenet(face_tensor).squeeze().cpu().numpy()
             return l2_normalize(emb), meta
 
-        arr = np.asarray(face_crop_pil, dtype=np.float32) / 255.0
-        if float(np.std(arr)) < 0.05:
-            raise ValueError(
-                "Khung hình khuôn mặt thiếu độ tương phản. Vui lòng hướng camera sau vào khuôn mặt nơi đủ sáng."
-            )
-
-        gray = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
-        gray = (gray - float(np.mean(gray))) / (float(np.std(gray)) + 1e-5)
-
-        small_16 = np.asarray(
-            Image.fromarray((gray * 32.0 + 128.0).clip(0, 255).astype(np.uint8)).resize(
-                (16, 16), Image.Resampling.BILINEAR
-            ),
-            dtype=np.float32,
-        ).flatten()
-        small_16 = small_16 - float(np.mean(small_16))
-        gx = np.diff(gray, axis=1)[:, :63]
-        gy = np.diff(gray, axis=0)[:63, :]
-        gx_128 = np.interp(
-            np.linspace(0, gx.size - 1, 128), np.arange(gx.size), gx.flatten()
-        )
-        gy_128 = np.interp(
-            np.linspace(0, gy.size - 1, 128), np.arange(gy.size), gy.flatten()
-        )
-        emb_512 = np.concatenate([small_16 / 32.0, gx_128, gy_128], axis=0)
-        emb_512 = emb_512 - float(np.mean(emb_512))
-        return l2_normalize(emb_512), meta
+        raise ValueError("Không thể trích xuất đặc trưng khuôn mặt.")
 

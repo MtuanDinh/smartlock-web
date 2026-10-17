@@ -781,15 +781,20 @@ async def verify_face_step2(
     user_id = str(session["userId"])
     user_name = str(session["userName"])
 
+    user_bio = fb_get(f"SmartLock/Biometrics/{user_id}") or {}
+    saved_face = user_bio.get("faceEmbedding")
+    target_dim = len(saved_face) if isinstance(saved_face, list) and len(saved_face) in (128, 512) else None
+
     image_bytes = await image.read()
     try:
-        probe_face, face_meta = engine.extract_face_embedding(image_bytes)
+        probe_face, face_meta = engine.extract_face_embedding(image_bytes, target_dim=target_dim)
     except ValueError as exc:
         fail_meta = getattr(exc, "face_meta", {}) or {}
         return JSONResponse(
             content={
                 "unlocked": False,
                 "expired": False,
+                "mismatched": False,
                 "aligned": False,
                 "checks": fail_meta.get("checks", []),
                 "bbox": fail_meta.get("bbox"),
@@ -798,13 +803,12 @@ async def verify_face_step2(
             }
         )
 
-    user_bio = fb_get(f"SmartLock/Biometrics/{user_id}") or {}
-    saved_face = user_bio.get("faceEmbedding")
     if not isinstance(saved_face, list) or len(saved_face) == 0:
         return JSONResponse(
             content={
                 "unlocked": False,
                 "expired": False,
+                "mismatched": True,
                 "aligned": True,
                 "checks": face_meta.get("checks", []),
                 "bbox": face_meta.get("bbox"),
@@ -813,54 +817,118 @@ async def verify_face_step2(
             }
         )
 
+    now_ts = time.time()
+    first_aligned = session.get("firstAlignedAt")
+    if not first_aligned:
+        session["firstAlignedAt"] = now_ts
+        first_aligned = now_ts
+
+    attempts = int(session.get("matchAttempts", 0)) + 1
+    session["matchAttempts"] = attempts
+    elapsed_matching = now_ts - float(first_aligned)
+
     face_score = cosine_similarity(probe_face, saved_face)
-    threshold = getattr(engine, "face_threshold", 0.65)
-    if face_score < threshold:
+    best_score = max(float(session.get("bestFaceScore", 0.0)), face_score)
+    session["bestFaceScore"] = best_score
+
+    # Ngưỡng động phù hợp với số chiều vector lưu trong database
+    if len(saved_face) == 128:
+        threshold = 0.38
+    elif len(saved_face) == 512:
+        threshold = 0.40
+    else:
+        threshold = getattr(engine, "face_threshold", 0.38)
+
+    # Trường hợp 1: Nhận diện khuôn mặt thành công
+    if face_score >= threshold:
+        VOICE_SESSIONS.pop(sessionToken, None)
+        now_ms = int(time.time() * 1000)
+
+        fb_put("SmartLock/Control/Remote_Open", False)
+        fb_put("SmartLock/Control/Remote_Open", True)
+        fb_post(
+            "SmartLock/Logs",
+            {
+                "action": "Mở bằng Sinh trắc học",
+                "user": user_name,
+                "timestamp": now_ms,
+            },
+        )
+
+        logger.info(
+            "Face MATCHED user=%s (%s): score=%.3f >= threshold=%.2f in %.1fs (%d attempts)",
+            user_id,
+            user_name,
+            face_score,
+            threshold,
+            elapsed_matching,
+            attempts,
+        )
+
+        return JSONResponse(
+            content={
+                "unlocked": True,
+                "expired": False,
+                "mismatched": False,
+                "aligned": True,
+                "userId": user_id,
+                "userName": user_name,
+                "voiceScore": session.get("voiceScore"),
+                "phraseScore": session.get("phraseScore"),
+                "faceScore": round(face_score, 3),
+                "threshold": round(threshold, 2),
+                "checks": face_meta.get("checks", []),
+                "bbox": face_meta.get("bbox"),
+                "landmarks": face_meta.get("landmarks", []),
+                "resolution": {
+                    "width": int(face_meta.get("width", 1280)),
+                    "height": int(face_meta.get("height", 720)),
+                },
+            }
+        )
+
+    # Trường hợp 2: Hết thời gian đối chiếu 10 giây mà vẫn không khớp
+    if elapsed_matching >= 10.0:
+        VOICE_SESSIONS.pop(sessionToken, None)
+        logger.warning(
+            "Face verification MISMATCH user=%s (%s): best_score=%.3f < threshold=%.2f after %.1fs (%d attempts)",
+            user_id,
+            user_name,
+            best_score,
+            threshold,
+            elapsed_matching,
+            attempts,
+        )
         return JSONResponse(
             content={
                 "unlocked": False,
                 "expired": False,
+                "mismatched": True,
                 "aligned": True,
+                "faceScore": round(max(0.0, face_score), 3),
+                "threshold": round(threshold, 2),
                 "checks": face_meta.get("checks", []),
                 "bbox": face_meta.get("bbox"),
                 "landmarks": face_meta.get("landmarks", []),
-                "faceScore": round(max(0.0, face_score), 3),
-                "threshold": round(threshold, 2),
-                "reason": f"Khuôn mặt chưa khớp với {user_name} ({max(0.0, face_score)*100:.0f}% < {int(threshold*100)}%). Đang tiếp tục quét...",
+                "reason": f"Khuôn mặt không khớp với {user_name} sau 10 giây đối chiếu.",
             }
         )
 
-    VOICE_SESSIONS.pop(sessionToken, None)
-    now_ms = int(time.time() * 1000)
-
-    fb_put("SmartLock/Control/Remote_Open", False)
-    fb_put("SmartLock/Control/Remote_Open", True)
-    fb_post(
-        "SmartLock/Logs",
-        {
-            "action": "Mở bằng Sinh trắc học",
-            "user": user_name,
-            "timestamp": now_ms,
-        },
-    )
-
+    # Trường hợp 3: Vẫn đang trong cửa sổ 10 giây đối chiếu 5/5
+    rem_sec = max(0, int(round(10.0 - elapsed_matching)))
     return JSONResponse(
         content={
-            "unlocked": True,
+            "unlocked": False,
+            "expired": False,
+            "mismatched": False,
             "aligned": True,
-            "userId": user_id,
-            "userName": user_name,
-            "voiceScore": session["voiceScore"],
-            "phraseScore": session["phraseScore"],
-            "faceScore": round(face_score, 3),
-            "threshold": round(threshold, 2),
+            "remainingMatchingSec": rem_sec,
             "checks": face_meta.get("checks", []),
             "bbox": face_meta.get("bbox"),
             "landmarks": face_meta.get("landmarks", []),
-            "resolution": {
-                "width": int(face_meta.get("width", 1280)),
-                "height": int(face_meta.get("height", 720)),
-            },
+            "faceScore": round(max(0.0, face_score), 3),
+            "threshold": round(threshold, 2),
+            "reason": f"Đang đối chiếu với {user_name} ({max(0.0, face_score)*100:.0f}% / {int(threshold*100)}% - còn {rem_sec}s)...",
         }
     )
 

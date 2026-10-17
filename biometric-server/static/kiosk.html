@@ -450,6 +450,8 @@
     // Độ trễ 10 giây khi thêm/cập nhật khuôn mặt để người dùng kịp đặt mặt vào khung mô hình
     const FACE_ENROLL_PREP_MS = 10000;
     let faceEnrollPrepStartAt = 0;
+    let faceMatchingStartAt = 0;
+    let isFaceMismatched = false;
 
     // Tham số VAD chống nhiễu nền & chống tự kích hoạt khi im lặng
     const TARGET_SAMPLE_RATE = 16000;
@@ -821,6 +823,15 @@
           'px-2.5 py-1 rounded-lg bg-amber-950/90 border border-amber-400/60 text-[10px] font-extrabold text-amber-300 backdrop-blur-sm truncate';
         faceAlignBadge.textContent =
           customBadgeText || '⚠️ ĐẶT MẶT VÀO GIỮA KHUNG BẦU DỤC';
+      } else if (mode === 'error') {
+        faceGuideBrackets.setAttribute('stroke', '#ef4444');
+        faceGuideContour.setAttribute('stroke', '#ef4444');
+        cameraFrameBox.className =
+          'relative w-full aspect-[4/3] max-h-80 rounded-2xl overflow-hidden border-2 border-rose-500 bg-black shadow-xl shadow-rose-500/30 transition-colors duration-300';
+        faceAlignBadge.className =
+          'px-2.5 py-1 rounded-lg bg-rose-950/90 border border-rose-400/80 text-[10px] font-extrabold text-rose-300 backdrop-blur-sm truncate';
+        faceAlignBadge.textContent =
+          customBadgeText || '❌ KHÔNG KHỚP KHUÔN MẶT';
       } else {
         faceGuideBrackets.setAttribute('stroke', '#38bdf8');
         faceGuideContour.setAttribute('stroke', '#38bdf8');
@@ -861,6 +872,8 @@
 
     async function setVisualPhase(phase) {
       resetVadBuffer();
+      faceMatchingStartAt = 0;
+      isFaceMismatched = false;
       if (phase === 'voice') {
         clearLandmarkCanvas();
         if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
@@ -1077,7 +1090,7 @@
     }
 
     async function processFaceStep() {
-      if (isBusyUploading || Date.now() - lastFaceScanAt < 420) return;
+      if (isBusyUploading || isFaceMismatched || Date.now() - lastFaceScanAt < 420) return;
       if (Date.now() < cooldownUntil) return;
       const frameBlob = await captureHighResFrameBlob();
       if (!frameBlob) return;
@@ -1175,13 +1188,16 @@
           0,
           Math.ceil((sessionExpiresAt - Date.now()) / 1000)
         );
-        camCountdown.textContent = `${leftSec}s`;
+
         if (leftSec <= 0) {
           activeSessionToken = null;
+          faceMatchingStartAt = 0;
+          clearLandmarkCanvas();
           await setVisualPhase('voice');
           statusTitle.textContent = 'Hết thời gian quét khuôn mặt';
           statusDesc.textContent =
             'Đã quay lại Bước 1. Vui lòng nói câu mật khẩu để thử lại.';
+          speakPrompt('Khuôn mặt không khớp. Vui lòng thử lại');
           return;
         }
 
@@ -1196,8 +1212,10 @@
         const data = await resp.json();
         renderFaceAlgorithmHud(data);
 
+        // Trường hợp 1: Nhận diện khuôn mặt thành công
         if (data.unlocked) {
           activeSessionToken = null;
+          faceMatchingStartAt = 0;
           triggerShutterFlash();
           updateFaceGuideVisual('aligned', '🔓 XÁC THỰC KHUÔN MẶT ĐẠT');
           teleScores.textContent = `Voice: ${Math.round(
@@ -1215,24 +1233,87 @@
                 'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
             }
           }, 4000);
-        } else if (data.expired) {
+          return;
+        }
+
+        // Trường hợp 2: Bất khớp (Server báo mismatched HOẶC client quá 10 giây đối chiếu 5/5)
+        const isClientTimedOut =
+          faceMatchingStartAt > 0 && Date.now() - faceMatchingStartAt >= 10000;
+
+        if (data.mismatched || isClientTimedOut) {
+          isFaceMismatched = true;
           activeSessionToken = null;
+          faceMatchingStartAt = 0;
+          clearLandmarkCanvas();
+          updateFaceGuideVisual('error', '❌ KHÔNG KHỚP KHUÔN MẶT');
+          camCountdown.textContent = '0s';
+          camCountdown.className =
+            'px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-mono font-extrabold shadow-lg shrink-0';
+          statusTitle.textContent = '❌ Khuôn mặt không khớp';
+          statusDesc.textContent =
+            data.reason || 'Khuôn mặt không khớp với dữ liệu đã lưu. Vui lòng thử lại.';
+          if (data.faceScore !== undefined) {
+            teleScores.textContent = `Face Match: ${Math.round(
+              data.faceScore * 100
+            )}% (Chuẩn: ${Math.round((data.threshold || 0.38) * 100)}%)`;
+          }
+          speakPrompt('Khuôn mặt không khớp. Vui lòng thử lại');
+          setTimeout(() => {
+            if (currentServerMode === 'verify') {
+              void setVisualPhase('voice');
+              statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
+              statusDesc.textContent =
+                'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+            }
+          }, 2600);
+          return;
+        }
+
+        // Trường hợp 3: Phiên tổng thể hết hạn
+        if (data.expired) {
+          activeSessionToken = null;
+          faceMatchingStartAt = 0;
+          clearLandmarkCanvas();
           await setVisualPhase('voice');
           statusTitle.textContent = 'Phiên xác thực đã hết hạn';
           statusDesc.textContent =
             data.reason || 'Vui lòng đọc lại câu mật khẩu.';
-        } else {
+          speakPrompt('Khuôn mặt không khớp. Vui lòng thử lại');
+          return;
+        }
+
+        // Trường hợp 4: Khuôn mặt đã đạt chuẩn 5/5 -> Đang trong 10 giây đối chiếu
+        if (data.aligned) {
+          if (faceMatchingStartAt === 0) {
+            faceMatchingStartAt = Date.now();
+          }
+          const elapsedMs = Date.now() - faceMatchingStartAt;
+          const remMatchSec = Math.max(0, Math.ceil((10000 - elapsedMs) / 1000));
+          camCountdown.textContent = `${remMatchSec}s`;
+          camCountdown.className =
+            'px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-mono font-extrabold shadow-lg shrink-0';
           updateFaceGuideVisual(
-            data.aligned ? 'aligned' : 'warning',
-            data.aligned
-              ? '🔍 ĐANG ĐỐI CHIẾU VECTOR 512-D'
-              : '⚠️ ĐẶT MẶT VÀO KHUNG MÔ HÌNH'
+            'aligned',
+            `🔍 ĐANG ĐỐI CHIẾU (${remMatchSec}s)`
           );
           if (data.faceScore !== undefined) {
-            teleScores.textContent = `FaceNet Similarity: ${Math.round(
+            teleScores.textContent = `Face Match: ${Math.round(
               data.faceScore * 100
-            )}%`;
+            )}% / Chuẩn: ${Math.round((data.threshold || 0.38) * 100)}%`;
           }
+          statusTitle.textContent = `🔍 Đang nhận diện khuôn mặt (${remMatchSec}s)...`;
+          statusDesc.textContent =
+            data.reason ||
+            `Đang so khớp với dữ liệu thành viên (còn ${remMatchSec}s)...`;
+        } else {
+          // Khuôn mặt chưa đạt đủ 5/5 tiêu chí thuật toán -> Hướng dẫn căn chỉnh
+          camCountdown.textContent = `${leftSec}s`;
+          camCountdown.className =
+            'px-2.5 py-1 rounded-lg bg-slate-900/90 text-white text-[11px] font-mono font-bold shadow-lg shrink-0';
+          updateFaceGuideVisual(
+            'warning',
+            '⚠️ ĐẶT MẶT VÀO KHUNG MÔ HÌNH'
+          );
           statusDesc.textContent =
             data.reason || 'Hãy đặt khuôn mặt vào đúng khung mô hình bầu dục...';
         }
