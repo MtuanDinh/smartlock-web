@@ -948,12 +948,21 @@
             statusDesc.textContent =
               transData.detail ||
               'Hãy nói rõ một câu mật khẩu bất kỳ (tối thiểu 2 từ) vào mic điện thoại.';
+            cooldownUntil = Date.now() + 900;
           } else {
-            statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
-            statusDesc.textContent =
-              'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+            if (transData.hasSpeech) {
+              statusTitle.textContent = 'Không nhận diện được giọng nói';
+              statusDesc.textContent =
+                'Vui lòng thử lại: Hãy nói rõ câu mật khẩu đã đăng ký vào mic điện thoại.';
+              speakPrompt('Không nhận diện được giọng nói, Vui lòng thử lại');
+              cooldownUntil = Date.now() + 2800;
+            } else {
+              statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
+              statusDesc.textContent =
+                'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+              cooldownUntil = Date.now() + 900;
+            }
           }
-          cooldownUntil = Date.now() + 900;
           return;
         }
 
@@ -1030,9 +1039,11 @@
         const data = await resp.json();
 
         if (data.silence) {
-          statusTitle.textContent = 'Đang lắng nghe câu mật khẩu...';
+          statusTitle.textContent = 'Không nhận diện được giọng nói';
           statusDesc.textContent =
-            'Hãy nói câu mật khẩu đã đăng ký để bắt đầu xác thực mở khóa.';
+            data.reason || 'Hãy nói câu mật khẩu đã đăng ký để thử lại.';
+          speakPrompt('Không nhận diện được giọng nói, Vui lòng thử lại');
+          cooldownUntil = Date.now() + 2800;
           return;
         }
 
@@ -1052,16 +1063,15 @@
           activeSessionUser = data.userName;
           sessionExpiresAt = Date.now() + (data.expiresInSeconds || 35) * 1000;
           await setVisualPhase('face');
-          statusTitle.textContent = `Xin chào ${data.userName}! Đặt mặt vào khung mô hình`;
-          statusDesc.textContent = `Khớp câu lệnh "${data.spokenText}". Hãy đặt khuôn mặt vào đúng khung mô hình bầu dục để mở khóa...`;
-          speakPrompt(
-            `Xin chào ${data.userName}, vui lòng đặt khuôn mặt vào khung mô hình để mở khóa.`
-          );
+          statusTitle.textContent = `Xin chào ${data.userName}! Vui lòng nhìn thẳng vào camera`;
+          statusDesc.textContent = `Khớp câu lệnh "${data.spokenText}". Vui lòng nhìn thẳng vào camera để mở khóa...`;
+          speakPrompt('Vui lòng nhìn thẳng vào camera');
         } else {
           statusTitle.textContent = 'Chưa khớp Giọng nói / Câu mật khẩu';
           statusDesc.textContent =
             data.reason || 'Vui lòng đọc đúng câu mật khẩu đã đăng ký.';
-          cooldownUntil = Date.now() + 1400;
+          speakPrompt('Không nhận diện được giọng nói, Vui lòng thử lại');
+          cooldownUntil = Date.now() + 2800;
         }
       } catch (_) {
         statusTitle.textContent = 'Lỗi kết nối tới Biometric Server';
