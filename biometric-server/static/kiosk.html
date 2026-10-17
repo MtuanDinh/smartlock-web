@@ -825,13 +825,13 @@
       if (remSec > 0) {
         facePrepTimer.className =
           'px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
-        facePrepTimer.textContent = `⏳ CĂN CHỈNH: ${remSec}s`;
-        camCountdown.textContent = `CHỤP SAU ${remSec}s`;
+        facePrepTimer.textContent = `⏳ CHUẨN BỊ: ${remSec}s`;
+        camCountdown.textContent = 'ĐỦ 5/5 TỰ CHỤP';
       } else {
         facePrepTimer.className =
           'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-[11px] font-mono font-extrabold shadow-lg shrink-0';
-        facePrepTimer.textContent = '📸 TỰ ĐỘNG CHỤP';
-        camCountdown.textContent = 'AUTO CAPTURE';
+        facePrepTimer.textContent = '📸 CHỜ ĐỦ 5/5';
+        camCountdown.textContent = 'ĐỦ 5/5 TỰ CHỤP';
       }
     }
 
@@ -1065,86 +1065,74 @@
             Math.ceil((FACE_ENROLL_PREP_MS - elapsedPrep) / 1000)
           );
 
-          // Trong 10 giây đầu tiên: Chạy 5 thuật toán kiểm tra khuôn mặt theo thời gian thực & hiển thị trực tiếp trên màn hình
-          if (remPrepSec > 0) {
-            const checkForm = new FormData();
-            checkForm.append('image', frameBlob, 'check_guide.jpg');
-            const checkResp = await fetch(
-              `${API_BASE}/api/biometrics/check-face-frame`,
-              {
-                method: 'POST',
-                body: checkForm,
-              }
-            );
-            const checkData = await checkResp.json();
-            renderFaceAlgorithmHud(checkData);
+          // Chạy 5 thuật toán kiểm tra khuôn mặt theo thời gian thực (YuNet DNN + Căn tâm + Kích thước + 5 điểm mốc + Độ nét)
+          const checkForm = new FormData();
+          checkForm.append('image', frameBlob, 'check_guide.jpg');
+          const checkResp = await fetch(
+            `${API_BASE}/api/biometrics/check-face-frame`,
+            {
+              method: 'POST',
+              body: checkForm,
+            }
+          );
+          const checkData = await checkResp.json();
+          renderFaceAlgorithmHud(checkData);
 
-            if (checkData.aligned) {
-              updateFaceGuideVisual(
-                'aligned',
-                '✅ ĐẠT 5/5 THUẬT TOÁN — GIỮ YÊN!'
-              );
-              if (btnForceSnapFace) btnForceSnapFace.classList.remove('hidden');
-              statusTitle.textContent = `Tự động chụp sau ${remPrepSec}s (Đã đạt 5/5 chuẩn!)`;
-              statusDesc.textContent =
-                'Khuôn mặt đã khớp hoàn toàn khung mô hình & đạt đủ 5 thuật toán. Giữ yên hoặc bấm "CHỤP NGAY"...';
-            } else {
-              updateFaceGuideVisual(
-                'warning',
-                '⚠️ ĐANG KIỂM TRA 5 THUẬT TOÁN'
-              );
+          // CỨ ĐỦ 5/5 KIỂM TRA KHUÔN MẶT LÀ TỰ ĐỘNG CHỤP & LƯU NGAY LẬP TỨC — KHÔNG CẦN CHỜ HẾT DELAY!
+          if (checkData.aligned) {
+            updateFaceGuideVisual('aligned', '📸 ĐÃ ĐẠT 5/5 CHUẨN — TỰ ĐỘNG CHỤP!');
+            statusTitle.textContent = '📸 Đang tự động chụp & lưu khuôn mặt chuẩn HD...';
+            statusDesc.textContent =
+              'Đã đạt chuẩn 5/5 thuật toán! Đang gửi ảnh HD lên Server...';
+
+            const formData = new FormData();
+            formData.append('userId', enrollInfo.userId);
+            formData.append('image', frameBlob, 'rear_cam_hd.jpg');
+
+            const resp = await fetch(`${API_BASE}/api/biometrics/enroll-face`, {
+              method: 'POST',
+              body: formData,
+            });
+            const data = await resp.json();
+            renderFaceAlgorithmHud(data);
+
+            if (resp.ok && data.ok) {
+              triggerShutterFlash();
               if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
-              statusTitle.textContent = `Còn ${remPrepSec}s căn chỉnh khuôn mặt vào mô hình`;
+              updateFaceGuideVisual('aligned', '📸 ĐÃ TỰ ĐỘNG CHỤP & LƯU HD');
+              teleScores.textContent = `FaceNet: 512-D (${data.resolution?.width}x${data.resolution?.height})`;
+              statusTitle.textContent = `🎉 Đã tự động chụp & lưu Khuôn mặt cho ${enrollInfo.userName}!`;
               statusDesc.textContent =
-                checkData.detail ||
-                'Hãy di chuyển khuôn mặt vào chính giữa khung bầu dục trên màn hình.';
+                'Khuôn mặt đạt chuẩn 5/5 thuật toán đã được lưu lên Server.';
+              speakPrompt(
+                `Đã tự động chụp và lưu khuôn mặt chuẩn cho ${enrollInfo.userName} thành công.`
+              );
+              enrollInfo.active = false;
+              enrollInfo.step = 'completed';
+              setTimeout(() => {
+                void setVisualPhase('voice');
+              }, 1400);
             }
             return;
           }
 
-          // Sau khi hết 10 giây đếm ngược: Tự động chụp ngay khi đạt đủ 5 thuật toán
-          const formData = new FormData();
-          formData.append('userId', enrollInfo.userId);
-          formData.append('image', frameBlob, 'rear_cam_hd.jpg');
-
-          const resp = await fetch(`${API_BASE}/api/biometrics/enroll-face`, {
-            method: 'POST',
-            body: formData,
-          });
-          const data = await resp.json();
-          renderFaceAlgorithmHud(data);
-
-          if (resp.ok && data.ok) {
-            triggerShutterFlash();
-            if (btnForceSnapFace) btnForceSnapFace.classList.add('hidden');
-            updateFaceGuideVisual('aligned', '📸 ĐÃ TỰ ĐỘNG CHỤP & LƯU HD');
-            teleScores.textContent = `FaceNet: 512-D (${data.resolution?.width}x${data.resolution?.height})`;
-            statusTitle.textContent = `🎉 Đã tự động chụp & lưu Khuôn mặt cho ${enrollInfo.userName}!`;
+          // Khi chưa đạt đủ 5/5: Hướng dẫn người dùng căn chỉnh khuôn mặt vào khung mô hình
+          updateFaceGuideVisual(
+            'warning',
+            remPrepSec > 0
+              ? `⏳ CĂN CHỈNH: ${remPrepSec}s (CHỜ ĐẠT 5/5)`
+              : '⚠️ CHỜ ĐẠT ĐỦ 5/5 THUẬT TOÁN ĐỂ TỰ CHỤP'
+          );
+          if (btnForceSnapFace) btnForceSnapFace.classList.remove('hidden');
+          if (remPrepSec > 0) {
+            statusTitle.textContent = `Còn ${remPrepSec}s chuẩn bị — Căn chỉnh vào mô hình`;
             statusDesc.textContent =
-              'Khuôn mặt đạt chuẩn 5/5 thuật toán đã được lưu lên Server.';
-            speakPrompt(
-              `Đã tự động chụp và lưu khuôn mặt chuẩn cho ${enrollInfo.userName} thành công.`
-            );
-            enrollInfo.active = false;
-            enrollInfo.step = 'completed';
-            setTimeout(() => {
-              void setVisualPhase('voice');
-            }, 1400);
+              checkData.detail ||
+              'Hãy di chuyển khuôn mặt vào chính giữa khung bầu dục — Cứ đạt đủ 5/5 chuẩn là hệ thống tự động chụp ngay!';
           } else {
-            updateFaceGuideVisual(
-              data.aligned ? 'aligned' : 'warning',
-              data.countingDown
-                ? `⏳ CÒN ${data.secondsLeft}s CHUẨN BỊ`
-                : '⚠️ CHỜ ĐẠT ĐỦ 5/5 THUẬT TOÁN ĐỂ TỰ CHỤP'
-            );
-            if (data.aligned && btnForceSnapFace) {
-              btnForceSnapFace.classList.remove('hidden');
-            }
-            statusTitle.textContent = data.countingDown
-              ? `Tự động chụp sau ${data.secondsLeft}s...`
-              : 'Đang chờ khuôn mặt đạt đủ 5/5 thuật toán để tự chụp';
+            statusTitle.textContent = 'Đang chờ khuôn mặt đạt đủ 5/5 thuật toán để tự chụp';
             statusDesc.textContent =
-              data.detail ||
+              checkData.detail ||
               'Hãy đặt khuôn mặt nằm gọn vào giữa khung bầu dục — Hệ thống sẽ tự động chụp ngay khi đạt 5/5 tiêu chí!';
           }
           return;

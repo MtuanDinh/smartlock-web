@@ -23,11 +23,13 @@ pnpm-debug.log*
 
 # Local agent skills/cache
 .agents/
+.vite/
 
 # Python Biometric Server cache & downloaded weights
 __pycache__/
 *.pyc
 biometric-server/pretrained_models/
+biometric-server/models/
 biometric-server/*.pem
 biometric-server/cloudflared*
 

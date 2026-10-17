@@ -808,7 +808,8 @@ async def verify_face_step2(
         )
 
     face_score = cosine_similarity(probe_face, saved_face)
-    if face_score < engine.FACE_THRESHOLD:
+    threshold = getattr(engine, "face_threshold", 0.65)
+    if face_score < threshold:
         return JSONResponse(
             content={
                 "unlocked": False,
@@ -818,7 +819,8 @@ async def verify_face_step2(
                 "bbox": face_meta.get("bbox"),
                 "landmarks": face_meta.get("landmarks", []),
                 "faceScore": round(max(0.0, face_score), 3),
-                "reason": f"Khuôn mặt chưa khớp với {user_name} ({max(0.0, face_score)*100:.0f}%). Đang tiếp tục quét...",
+                "threshold": round(threshold, 2),
+                "reason": f"Khuôn mặt chưa khớp với {user_name} ({max(0.0, face_score)*100:.0f}% < {int(threshold*100)}%). Đang tiếp tục quét...",
             }
         )
 
@@ -845,6 +847,7 @@ async def verify_face_step2(
             "voiceScore": session["voiceScore"],
             "phraseScore": session["phraseScore"],
             "faceScore": round(face_score, 3),
+            "threshold": round(threshold, 2),
             "checks": face_meta.get("checks", []),
             "bbox": face_meta.get("bbox"),
             "landmarks": face_meta.get("landmarks", []),

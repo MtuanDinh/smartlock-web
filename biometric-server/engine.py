@@ -100,6 +100,15 @@ class BiometricEngine:
     PASSPHRASE_THRESHOLD = 0.76
     FACE_THRESHOLD = 0.68
 
+    @property
+    def face_threshold(self) -> float:
+        """
+        Ngưỡng Cosine Similarity khuôn mặt:
+        - 0.65 khi sử dụng mạng nơ-ron sâu FaceNet-PyTorch (InceptionResnetV1).
+        - 0.48 khi sử dụng bộ mã hóa không gian / đạo hàm Laplacian 512-D dự phòng.
+        """
+        return 0.65 if self.facenet_ready else 0.48
+
     def __init__(self) -> None:
         self.speaker_model = None
         self.mtcnn = None
